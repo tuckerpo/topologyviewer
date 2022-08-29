@@ -175,6 +175,8 @@ app.layout = html.Div([
 def marshall_nbapi_blob(nbapi_json) -> Topology:
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
+    if type(nbapi_json) is not list:
+        return Topology({}, {})
 
     agents, stations = {}, {}
     # Don't try to be too clever, here - just do a bunch of linear passes over the json entries until we're doing figuring things out.
