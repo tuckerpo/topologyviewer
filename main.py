@@ -160,8 +160,10 @@ app.layout = html.Div([
                             """)),
                             dcc.Dropdown(options=[], id='transition_station', placeholder='Select a station'),
                             dcc.Dropdown(options=[], id='transition_agent', placeholder='Select an agent.'),
+                            dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", value='VBSS', inline=True),
                             dcc.Interval(id='transition-interval', interval=300, n_intervals=0),
-                            html.Div(id='dd-output-container')
+                            html.Button('Transition', id='transition-submit', n_clicks=0),
+                            html.Div(id="transition-output", children='Press Transition to begin station transition.')
                         ],
                         style={'height': '400px'}),
                 ]
@@ -291,6 +293,23 @@ def update_transition_dropdown_menus(unused):
     avail_stations = [sta for sta in g_Topology.stations]
     avail_agents = [a for a in g_Topology.agents]
     return (avail_stations, avail_agents)
+
+@app.callback(
+    Output('transition-output', 'children'),
+    Input('transition-submit', 'n_clicks'),
+    State('transition_station', 'value'),
+    State('transition_agent', 'value'),
+    State('transition-type-selection', 'value'),
+)
+def on_transition_click(n_clicks: int, station: str, new_agent: str, transition_type: str):
+    if not n_clicks:
+        return f"Click Transition to begin."
+    if not station:
+        return f"Select a station."
+    if not new_agent:
+        return f"Select a new agent."
+    # TODO NBAPI call to begin transition. We will want to track/display state, here.
+    return f"Requesting a {transition_type} transition of STA {station} to Agent {new_agent}"
 
 if __name__ == '__main__':
     app.run_server(debug=True)
