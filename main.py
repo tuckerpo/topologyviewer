@@ -263,6 +263,14 @@ def validate_ipv4(ip_str):
 def validate_port(port_str):
     return re.match(r'^\d{1,5}$', port_str) and int(port_str) > 0 and int(port_str) < 65535
 
+def send_client_steering_request(sta_mac: str, new_bssid: str):
+    # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
+    json_payload = {}
+    json_payload['station_mac'] = sta_mac
+    json_payload['target_bssid'] = new_bssid
+    request_string = "ubus call Device.WiFi.DataElements.Network ClientSteering {}".format(json_payload)
+    print(f"send client steering request, request_string={request_string}")
+
 @app.callback(
     Output('output', 'children'),
     Input('submit-val', 'n_clicks'),
@@ -313,7 +321,7 @@ def on_transition_click(n_clicks: int, station: str, new_agent: str, transition_
         return f"Select a station."
     if not new_agent:
         return f"Select a new agent."
-    # TODO NBAPI call to begin transition. We will want to track/display state, here.
+    send_client_steering_request(station, new_agent)
     return f"Requesting a {transition_type} transition of STA {station} to Agent {new_agent}"
 
 if __name__ == '__main__':
