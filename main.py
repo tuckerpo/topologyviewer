@@ -179,7 +179,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
         return Topology({}, {})
 
     agents, stations = {}, {}
-    # Don't try to be too clever, here - just do a bunch of linear passes over the json entries until we're doing figuring things out.
+    # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're doing figuring things out.
 
     # 0. Find the controller in the network.
     for e in nbapi_json:
@@ -208,7 +208,22 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     logging.debug(f"Station at {e['path']} is connected to a BSS advertised by some radio on device {device}")
                     stations[sta_mac]['ConnectedTo'] = device
 
-    # 3. Walk agents and tag whether or not they're the controller.
+    # 3. Get Radios
+    radio_num = 1
+    for e in nbapi_json:
+        if re.search(r"\.Radio\.\d\.$", e['path']):
+            print(f"Radio found at {e['path']}")
+            for device in agents:
+                if e['path'].startswith(agents[device]['path']):
+                    agents[device]["radio_{}".format(radio_num)] = e['parameters']
+                    agents[device]["radio_{}".format(radio_num)]['path'] = e['path']
+                    radio_num = radio_num + 1
+
+    # # 4. Collect BSSs and map them back to radios.
+    # for e in nbapi_json:
+        # ugh...
+
+    # 5. Walk agents and tag whether or not they're the controller.
     for agent in agents:
         if agent == g_controller_id:
             agents[agent]['IsController'] = True
