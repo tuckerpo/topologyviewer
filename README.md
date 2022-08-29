@@ -24,3 +24,7 @@ To test whether or not the HTTP<->Ambiorix proxy is running, and the port is ope
 `python main.py`
 
 `firefox localhost:8050 & disown`
+
+## **Tests:**
+
+`python tests.py`
