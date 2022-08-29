@@ -223,7 +223,6 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     radio_num = 1
     for e in nbapi_json:
         if re.search(r"\.Radio\.\d\.$", e['path']):
-            print(f"Radio found at {e['path']}")
             for device in agents:
                 if e['path'].startswith(agents[device]['path']):
                     agents[device]["radio_{}".format(radio_num)] = e['parameters']
@@ -234,14 +233,13 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     bss_num = 1
     for e in nbapi_json:
         if re.search(f"\.BSS\.\d\.$", e['path']):
-            print(f"BSS found at {e['path']}")
             for device in agents:
                 radio_fmt = "radio_{}"
                 num_radios = agents[device]['RadioNumberOfEntries']
                 for i in range(1, num_radios + 1):
                     radio_key = radio_fmt.format(i)
                     if radio_key in agents[device] and e['path'].startswith(agents[device][radio_key]['path']):
-                        print(f"\tThis BSS belongs to radio {radio_key} which lives on device {device}")
+                        logging.debug(f"\tThis BSS belongs to radio {radio_key} which lives on device {device}")
                         agents[device][radio_key]["bss_{}".format(bss_num)] = e['parameters']
                         agents[device][radio_key]["bss_{}".format(bss_num)]['path'] = e['path']
                         bss_num = bss_num + 1
