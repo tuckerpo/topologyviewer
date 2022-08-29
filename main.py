@@ -278,8 +278,8 @@ def connect_to_controller(n_clicks, ip, port, httpauth_u, httpauth_pw):
         nbapi_thread.quit()
     logging.debug(f"Starting NBAPI task at {ip}:{port}")
     nbapi_thread = NBAPI_Task(data_q, ip, port, 1000, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
-    nbapi_thread.run()
-    return f"Connecting to {ip}:{port}"
+    nbapi_thread.start()
+    return f"Connected to {ip}:{port}"
 
 @app.callback(Output('my-graph', 'figure'),
               Input('graph-interval', 'n_intervals'))
