@@ -173,6 +173,17 @@ app.layout = html.Div([
 ])
 
 def marshall_nbapi_blob(nbapi_json) -> Topology:
+    """Parse a list of NBAPI json entries
+
+    Args:
+        nbapi_json (json): NBAPI json response.
+
+    Returns:
+        Topology: Topological representation of the parsed data.
+
+    Note:
+        This is pretty fragile, and depends on the NBAPI<->HTTP proxy interface not changing.
+    """
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
     if type(nbapi_json) is not list:
