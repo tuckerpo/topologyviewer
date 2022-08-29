@@ -260,6 +260,9 @@ nbapi_thread = None
 def validate_ipv4(ip_str):
     return re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip_str)
 
+def validate_port(port_str):
+    return re.match(r'^\d{1,5}$', port_str) and int(port_str) > 0 and int(port_str) < 65535
+
 @app.callback(
     Output('output', 'children'),
     Input('submit-val', 'n_clicks'),
@@ -272,7 +275,9 @@ def connect_to_controller(n_clicks, ip, port, httpauth_u, httpauth_pw):
     if not n_clicks:
         return ""
     if not validate_ipv4(ip):
-        return f"{ip} seems malformed. Try again."
+        return f"IP address '{ip}' seems malformed. Try again."
+    if not validate_port(port):
+        return f"Port '{port}' seems malformed. Try again."
     global nbapi_thread
     if nbapi_thread:
         nbapi_thread.quit()
