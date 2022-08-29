@@ -230,9 +230,21 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     agents[device]["radio_{}".format(radio_num)]['path'] = e['path']
                     radio_num = radio_num + 1
 
-    # # 4. Collect BSSs and map them back to radios.
-    # for e in nbapi_json:
-        # ugh...
+    # 4. Collect BSSs and map them back to radios.
+    bss_num = 1
+    for e in nbapi_json:
+        if re.search(f"\.BSS\.\d\.$", e['path']):
+            print(f"BSS found at {e['path']}")
+            for device in agents:
+                radio_fmt = "radio_{}"
+                num_radios = agents[device]['RadioNumberOfEntries']
+                for i in range(1, num_radios + 1):
+                    radio_key = radio_fmt.format(i)
+                    if radio_key in agents[device] and e['path'].startswith(agents[device][radio_key]['path']):
+                        print(f"\tThis BSS belongs to radio {radio_key} which lives on device {device}")
+                        agents[device][radio_key]["bss_{}".format(bss_num)] = e['parameters']
+                        agents[device][radio_key]["bss_{}".format(bss_num)]['path'] = e['path']
+                        bss_num = bss_num + 1
 
     # 5. Walk agents and tag whether or not they're the controller.
     for agent in agents:
