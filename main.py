@@ -10,6 +10,7 @@ import networkx as nx
 import plotly.graph_objs as go
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+from topology import Topology
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
@@ -17,7 +18,9 @@ app.title = 'CableLabs EasyMesh Network Monitor'
 
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
-def network_graph(stations, agents):
+def network_graph(topology: Topology):
+    agents = topology.agents
+    stations = topology.stations
     G = nx.Graph()
     for sta in stations:
         G.add_node(sta)
@@ -26,11 +29,8 @@ def network_graph(stations, agents):
         G.add_node(agent)
         G.nodes()[agent]['params'] = agents[agent]
         G.nodes()[agent]['IsController'] = agents[agent]['IsController']
-    print("Checking for edge connections...")
-    for sta in stations:
-        if 'ConnectedTo' in stations[sta].keys() and stations[sta]['ConnectedTo'] in agents:
-            print(f"Station {sta} is ConnectedTo {stations[sta]['ConnectedTo']}")
-            G.add_edge(stations[sta]['ConnectedTo'], sta)
+    for connection in topology.get_connections():
+        G.add_edge(connection[0], connection[1])
     pos = nx.drawing.layout.spring_layout(G)
     for node in G.nodes:
         G.nodes[node]['pos'] = list(pos[node])
@@ -101,11 +101,9 @@ styles = {
     }
 }
 # EasyMesh entities
-stations = {}
+g_Topology = Topology({}, {})
 
-agents = {}
-
-controller_id = ""
+g_controller_id = ""
 
 radios = {}
 
@@ -145,7 +143,7 @@ app.layout = html.Div([
             html.Div(
                 className="eight columns",
                 children=[dcc.Graph(id="my-graph",
-                                    figure=network_graph(stations, agents), animate=True),
+                                    figure=network_graph(g_Topology), animate=True),
                           dcc.Interval(id='graph-interval', interval=5000, n_intervals=0)],
                 style={'height': '1000px'}
             ),
@@ -172,17 +170,18 @@ app.layout = html.Div([
     )
 ])
 
-def marshall_nbapi_blob(nbapi_json):
+def marshall_nbapi_blob(nbapi_json) -> Topology:
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
-    
+
+    agents, stations = {}, {}
     # Don't try to be too clever, here - just do a bunch of linear passes over the json entries until we're doing figuring things out.
-    
+
     # 0. Find the controller in the network.
     for e in nbapi_json:
         if re.search(r'\.Network\.$', e['path']):
-            global controller_id
-            controller_id = e['parameters']['ControllerID']
+            global g_controller_id
+            g_controller_id = e['parameters']['ControllerID']
 
     # 1. Build device path list, so we know which BSSs belong to which Agents
     device_paths = []
@@ -193,7 +192,7 @@ def marshall_nbapi_blob(nbapi_json):
             agent_id = e['parameters']['ID']
             agents[agent_id] = e['parameters']
             agents[agent_id]['path'] = e['path']
-    
+
     # 2. Find station entries and map them back to Devices via 'path'
     for e in nbapi_json:
         if re.search(r"\.STA\.\d\.$", e['path']):
@@ -207,10 +206,12 @@ def marshall_nbapi_blob(nbapi_json):
 
     # 3. Walk agents and tag whether or not they're the controller.
     for agent in agents:
-        if agent == controller_id:
+        if agent == g_controller_id:
             agents[agent]['IsController'] = True
         else:
             agents[agent]['IsController'] = False
+
+    return Topology(agents, stations)
 
 class HTTPBasicAuthParams():
     def __init__(self, user, pw) -> None:
@@ -243,7 +244,8 @@ class NBAPI_Task(threading.Thread):
             nbapi_root_json_blob = nbapi_root_request_response.json()
             # No reason to push this into a threadsafe q in this app, just process the data on this thread too.
             # data_q.put(nbapi_root_json_blob)
-            marshall_nbapi_blob(nbapi_root_json_blob)
+            global g_Topology
+            g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
             sleep(self.cadence_ms // 1000)
     def __repr__(self):
         return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}, data_q elements: {len(self.data_q)}"
@@ -280,14 +282,14 @@ def connect_to_controller(n_clicks, ip, port, httpauth_u, httpauth_pw):
 @app.callback(Output('my-graph', 'figure'),
               Input('graph-interval', 'n_intervals'))
 def update_graph(unused):
-    return network_graph(stations, agents)
+    return network_graph(g_Topology)
 
 @app.callback(Output('transition_station', 'options'),
               Output('transition_agent', 'options'),
               Input('transition-interval', 'n_intervals'))
 def update_transition_dropdown_menus(unused):
-    avail_stations = [sta for sta in stations]
-    avail_agents = [a for a in agents]
+    avail_stations = [sta for sta in g_Topology.stations]
+    avail_agents = [a for a in g_Topology.agents]
     return (avail_stations, avail_agents)
 
 if __name__ == '__main__':
