@@ -11,8 +11,8 @@ class TopologyParsingTests(unittest.TestCase):
         with open('files/two_stations.json', 'r') as file:
             nbapi_two_stations_json = json.load(file)
         topology = marshall_nbapi_blob(nbapi_two_stations_json)
-        self.assertEqual(len(topology.stations.keys()), 2, "Should have found two stations.")
-        self.assertEqual(len(topology.get_connections()), 2, "Should have found two connections between the stations and the agent.")
+        self.assertEqual(topology.get_num_stations_total(), 2, "Should have found two stations.")
+        self.assertEqual(topology.get_num_connections_total(), 2, "Should have found two connections between the stations and the agent.")
         self.assertEqual(len(topology.agents), 1, "Should have found an agent.")
 
     def test_garbage_input_to_parser(self):

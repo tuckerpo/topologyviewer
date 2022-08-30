@@ -6,10 +6,14 @@ from datetime import datetime
 from pprint import pformat, pprint
 from textwrap import dedent as d
 from time import sleep
+from typing import List
+
 import networkx as nx
 import plotly.graph_objs as go
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+
+from easymesh import BSS, Agent, Radio, Station
 from topology import Topology
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -19,18 +23,20 @@ app.title = 'CableLabs EasyMesh Network Monitor'
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
-    agents = topology.agents
-    stations = topology.stations
     G = nx.Graph()
-    for sta in stations:
-        G.add_node(sta)
-        G.nodes()[sta]['params'] = stations[sta]
-    for agent in agents:
-        G.add_node(agent)
-        G.nodes()[agent]['params'] = agents[agent]
-        G.nodes()[agent]['IsController'] = agents[agent]['IsController']
+    for sta in topology.get_stations():
+        print(f"adding node with station mac {sta.get_mac()}")
+        G.add_node(sta.get_mac())
+        G.nodes()[sta.get_mac()]['params'] = sta.params
+    for agent in topology.get_agents():
+        print(f"Adding node with id {agent.get_id()}")
+        G.add_node(agent.get_id())
+        G.nodes()[agent.get_id()]['params'] = agent.params
+        G.nodes[agent.get_id()]['IsController'] = (agent.get_id() == g_controller_id)
     for connection in topology.get_connections():
-        G.add_edge(connection[0], connection[1])
+        bssid, station_mac = connection
+        agent_from_bssid = topology.get_agent_id_from_bssid(bssid)
+        G.add_edge(agent_from_bssid, station_mac)
     pos = nx.drawing.layout.spring_layout(G)
     for node in G.nodes:
         G.nodes[node]['pos'] = list(pos[node])
@@ -101,7 +107,7 @@ styles = {
     }
 }
 # EasyMesh entities
-g_Topology = Topology({}, {})
+g_Topology = Topology({})
 
 g_controller_id = ""
 
@@ -159,7 +165,7 @@ app.layout = html.Div([
                             Transition station to new agent.
                             """)),
                             dcc.Dropdown(options=[], id='transition_station', placeholder='Select a station'),
-                            dcc.Dropdown(options=[], id='transition_agent', placeholder='Select an agent.'),
+                            dcc.Dropdown(options=[], id='transition_bssid', placeholder='Select a new BSSID.'),
                             dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", value='VBSS', inline=True),
                             dcc.Interval(id='transition-interval', interval=300, n_intervals=0),
                             html.Button('Transition', id='transition-submit', n_clicks=0),
@@ -187,9 +193,8 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
     if type(nbapi_json) is not list:
-        return Topology({}, {})
+        return Topology({})
 
-    agents, stations = {}, {}
     # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're doing figuring things out.
 
     # 0. Find the controller in the network.
@@ -198,63 +203,50 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             global g_controller_id
             g_controller_id = e['parameters']['ControllerID']
 
-    # 1. Build device path list, so we know which BSSs belong to which Agents
-    device_paths = []
+    # 1. Build the agent list.
+    agent_list: List[Agent] = []
     for e in nbapi_json:
         if re.search(r"\.Device\.\d\.$", e['path']):
-            logging.debug(f"Found a Device path {e['path']}, putting it in the list.")
-            device_paths.append(e['path'])
-            agent_id = e['parameters']['ID']
-            agents[agent_id] = e['parameters']
-            agents[agent_id]['path'] = e['path']
+            agent_list.append(Agent(e['path'], e['parameters']))
 
-    # 2. Find station entries and map them back to Devices via 'path'
-    for e in nbapi_json:
-        if re.search(r"\.STA\.\d\.$", e['path']):
-            logging.debug(f"Found a station at {e['path']}")
-            sta_mac = e['parameters']['MACAddress']
-            stations[sta_mac] = e['parameters']
-            for device in agents:
-                if e['path'].startswith(agents[device]['path']):
-                    logging.debug(f"Station at {e['path']} is connected to a BSS advertised by some radio on device {device}")
-                    stations[sta_mac]['ConnectedTo'] = device
-
-    # 3. Get Radios
-    radio_num = 1
+    # 2. Get Radios, add them to Agents
     for e in nbapi_json:
         if re.search(r"\.Radio\.\d\.$", e['path']):
-            for device in agents:
-                if e['path'].startswith(agents[device]['path']):
-                    agents[device]["radio_{}".format(radio_num)] = e['parameters']
-                    agents[device]["radio_{}".format(radio_num)]['path'] = e['path']
-                    radio_num = radio_num + 1
+            for agent in agent_list:
+                if e['path'].startswith(agent.path):
+                    agent.add_radio(Radio(e['path'], e['parameters']))
 
-    # 4. Collect BSSs and map them back to radios.
-    bss_num = 1
+    # 3. Collect BSSs and map them back to radios.
     for e in nbapi_json:
         if re.search(f"\.BSS\.\d\.$", e['path']):
-            for device in agents:
-                radio_fmt = "radio_{}"
-                num_radios = agents[device]['RadioNumberOfEntries']
-                for i in range(1, num_radios + 1):
-                    radio_key = radio_fmt.format(i)
-                    if radio_key in agents[device] and e['path'].startswith(agents[device][radio_key]['path']):
-                        logging.debug(f"\tThis BSS belongs to radio {radio_key} which lives on device {device}")
-                        agents[device][radio_key]["bss_{}".format(bss_num)] = e['parameters']
-                        agents[device][radio_key]["bss_{}".format(bss_num)]['path'] = e['path']
-                        bss_num = (bss_num + 1) % agents[device][radio_key]['BSSNumberOfEntries']
+            for agent in agent_list:
+                for radio in agent.get_radios():
+                    if e['path'].startswith(radio.path):
+                        radio.add_bss(BSS(e['path'], e['parameters']))
 
-    # 5. Walk agents and tag whether or not they're the controller.
-    for agent in agents:
-        if agent == g_controller_id:
-            agents[agent]['IsController'] = True
-        else:
-            agents[agent]['IsController'] = False
+    # 4. Map Stations to the BSS they're connected to.
+    for e in nbapi_json:
+        if re.search(r"\.STA\.\d\.$", e['path']):
+            for agent in agent_list:
+                for radio in agent.get_radios():
+                    for bss in radio.get_bsses():
+                        if e['path'].startswith(bss.path):
+                            bss.add_connected_station(Station(e['path'], e['parameters']))
+    # DEBUG
+    # for i, agent in enumerate(agent_list):
+    #     print(f"Agent_{i} ID {agent.get_id()}, {agent.num_radios()} radios.")
+    #     for n, radio in enumerate(agent.get_radios()):
+    #         print(f"\tRadio_{n} (belonging to device {agent.get_id()} has ruid {radio.get_ruid()}")
+    #         for m, bss in enumerate(radio.get_bsses()):
+    #             print(f"\t\tRadio (ruid: {radio.get_ruid()}) BSS_{m}: {bss.get_bssid()}")
+    #             for o, sta in enumerate(bss.get_connected_stations()):
+    #                 print(f"\t\t\tBSS {bss.get_bssid()} connected station: STA_{o}: {sta.get_mac()}")
 
-    return Topology(agents, stations)
+    # 5. Go for a walk. Go feel the sun. Maybe read a book about recursion.
+    return Topology(agent_list)
 
 class HTTPBasicAuthParams():
-    def __init__(self, user, pw) -> None:
+    def __init__(self, user: str, pw: str) -> None:
         self.user = user
         self.pw = pw
     def __repr__(self) -> str:
@@ -263,7 +255,7 @@ class HTTPBasicAuthParams():
 data_q = queue.Queue()
 
 class NBAPI_Task(threading.Thread):
-    def __init__(self, data_q, ip, port, cadence_ms=1000, auth_params=None):
+    def __init__(self, data_q, ip: str, port: str, cadence_ms: int = 1000, auth_params: HTTPBasicAuthParams = None):
         super().__init__()
         self.data_q = data_q
         self.ip = ip
@@ -295,11 +287,11 @@ class NBAPI_Task(threading.Thread):
 
 nbapi_thread = None
 
-def validate_ipv4(ip_str):
-    return re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip_str)
+def validate_ipv4(ip: str):
+    return re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip)
 
-def validate_port(port_str):
-    return re.match(r'^\d{1,5}$', port_str) and int(port_str) > 0 and int(port_str) < 65535
+def validate_port(port: str):
+    return re.match(r'^\d{1,5}$', port) and int(port) > 0 and int(port) < 65535
 
 def send_client_steering_request(sta_mac: str, new_bssid: str):
     # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
@@ -317,7 +309,7 @@ def send_client_steering_request(sta_mac: str, new_bssid: str):
     State('httpauth_user', 'value'),
     State('httpauth_pass', 'value')
 )
-def connect_to_controller(n_clicks, ip, port, httpauth_u, httpauth_pw):
+def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, httpauth_pw: str):
     if not n_clicks:
         return ""
     if not validate_ipv4(ip):
@@ -338,29 +330,30 @@ def update_graph(unused):
     return network_graph(g_Topology)
 
 @app.callback(Output('transition_station', 'options'),
-              Output('transition_agent', 'options'),
+              Output('transition_bssid', 'options'),
               Input('transition-interval', 'n_intervals'))
 def update_transition_dropdown_menus(unused):
-    avail_stations = [sta for sta in g_Topology.stations]
-    avail_agents = [a for a in g_Topology.agents]
-    return (avail_stations, avail_agents)
+    avail_stations = [sta.get_mac() for sta in g_Topology.get_stations()]
+    avail_bssids = [bss.get_bssid() for bss in g_Topology.get_bsses()]
+    return (avail_stations, avail_bssids)
 
 @app.callback(
     Output('transition-output', 'children'),
     Input('transition-submit', 'n_clicks'),
     State('transition_station', 'value'),
-    State('transition_agent', 'value'),
+    State('transition_bssid', 'value'),
     State('transition-type-selection', 'value'),
 )
-def on_transition_click(n_clicks: int, station: str, new_agent: str, transition_type: str):
+def on_transition_click(n_clicks: int, station: str, bssid: str, transition_type: str):
+    # TODO If the radial button for VBSS is selected, we should prompt to move a station to a new AP via Agent ID, not BSSID.
     if not n_clicks:
         return f"Click Transition to begin."
     if not station:
         return f"Select a station."
-    if not new_agent:
-        return f"Select a new agent."
-    send_client_steering_request(station, new_agent)
-    return f"Requesting a {transition_type} transition of STA {station} to Agent {new_agent}"
+    if not bssid:
+        return f"Select a new BSSID."
+    send_client_steering_request(station, bssid)
+    return f"Requesting a {transition_type} transition of STA {station} to BSSID {bssid}"
 
 if __name__ == '__main__':
     app.run_server(debug=True)
