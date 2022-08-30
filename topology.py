@@ -19,7 +19,7 @@ class Topology():
             list of connection 2-tuples ("bssid" : "station_mac")
             where station_mac is associated with and connected to bssid
         """
-        connections = list()
+        connections: List[Tuple] = []
         for agent in self.agents:
             for radio in agent.get_radios():
                 for bss in radio.get_bsses():
@@ -50,7 +50,7 @@ class Topology():
         return num_stations
 
     def get_stations(self) -> List[Station]:
-        stations = list()
+        stations: List[Station] = []
         for agent in self.agents:
             for radio in agent.get_radios():
                 for bss in radio.get_bsses():
@@ -59,7 +59,7 @@ class Topology():
         return stations
 
     def get_bsses(self) -> List[BSS]:
-        bss_list = list()
+        bss_list: List[BSS] = []
         for agent in self.agents:
             for radio in agent.get_radios():
                 for bss in radio.get_bsses():
