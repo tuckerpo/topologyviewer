@@ -1,5 +1,4 @@
 from pprint import pformat
-from tkinter import N
 from typing import List, Tuple
 from easymesh import Agent
 from easymesh import Radio
