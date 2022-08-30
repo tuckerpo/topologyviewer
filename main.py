@@ -242,7 +242,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         logging.debug(f"\tThis BSS belongs to radio {radio_key} which lives on device {device}")
                         agents[device][radio_key]["bss_{}".format(bss_num)] = e['parameters']
                         agents[device][radio_key]["bss_{}".format(bss_num)]['path'] = e['path']
-                        bss_num = bss_num + 1
+                        bss_num = (bss_num + 1) % agents[device][radio_key]['BSSNumberOfEntries']
 
     # 5. Walk agents and tag whether or not they're the controller.
     for agent in agents:
