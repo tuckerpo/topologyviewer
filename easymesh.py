@@ -13,7 +13,7 @@ class BSS():
     def __init__(self, path, params) -> None:
         self.path = path
         self.params = params
-        self.connected_stations = list()
+        self.connected_stations: List[Station] = []
     def add_connected_station(self, station) -> None:
         self.connected_stations.append(station)
     def get_num_connected_stations(self) -> int:
@@ -29,7 +29,7 @@ class Radio():
     def __init__(self, path, params) -> None:
         self.path = path
         self.params = params
-        self.bsses = list()
+        self.bsses: List[BSS] = []
     def add_bss(self, bss) -> None:
         self.bsses.append(bss)
     def get_ruid(self) -> str:
@@ -43,7 +43,7 @@ class Agent():
     def __init__(self, path, params) -> None:
         self.path = path
         self.params = params
-        self.radios = list()
+        self.radios: List[Radio] = []
     def add_radio(self, radio) -> None:
         self.radios.append(radio)
     def get_id(self) -> str:
