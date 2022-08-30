@@ -2,7 +2,6 @@ import logging
 import queue
 import re
 import threading
-from datetime import datetime
 from pprint import pformat, pprint
 from textwrap import dedent as d
 from time import sleep
@@ -108,11 +107,9 @@ styles = {
 }
 # EasyMesh entities
 g_Topology = Topology({})
-
 g_controller_id = ""
 
-radios = {}
-
+# HTML Layout / Components
 app.layout = html.Div([
     html.Div([html.H1("EasyMesh Network Topology Graph")],
              className="row",
@@ -195,7 +192,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     if type(nbapi_json) is not list:
         return Topology({})
 
-    # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're doing figuring things out.
+    # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're done figuring things out.
 
     # 0. Find the controller in the network.
     for e in nbapi_json:
@@ -252,12 +249,12 @@ class HTTPBasicAuthParams():
     def __repr__(self) -> str:
         return f"HTTPBasicAuthParams: username: {self.user}, pass: {self.pw}"
 
-data_q = queue.Queue()
+data_q_unused = queue.Queue()
 
 class NBAPI_Task(threading.Thread):
-    def __init__(self, data_q, ip: str, port: str, cadence_ms: int = 1000, auth_params: HTTPBasicAuthParams = None):
+    def __init__(self, data_q_unused, ip: str, port: str, cadence_ms: int = 1000, auth_params: HTTPBasicAuthParams = None):
         super().__init__()
-        self.data_q = data_q
+        self.data_q = data_q_unused
         self.ip = ip
         self.port = port
         self.cadence_ms = cadence_ms
@@ -274,8 +271,6 @@ class NBAPI_Task(threading.Thread):
             if not nbapi_root_request_response.ok:
                 break
             nbapi_root_json_blob = nbapi_root_request_response.json()
-            # No reason to push this into a threadsafe q in this app, just process the data on this thread too.
-            # data_q.put(nbapi_root_json_blob)
             global g_Topology
             g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
             sleep(self.cadence_ms // 1000)
@@ -299,8 +294,9 @@ def send_client_steering_request(sta_mac: str, new_bssid: str):
     json_payload['station_mac'] = sta_mac
     json_payload['target_bssid'] = new_bssid
     request_string = "ubus call Device.WiFi.DataElements.Network ClientSteering {}".format(json_payload)
-    print(f"send client steering request, request_string={request_string}")
+    print(f"TODO: send client steering request, request_string={request_string}")
 
+# Component callbacks
 @app.callback(
     Output('output', 'children'),
     Input('submit-val', 'n_clicks'),
@@ -320,7 +316,7 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
     if nbapi_thread:
         nbapi_thread.quit()
     logging.debug(f"Starting NBAPI task at {ip}:{port}")
-    nbapi_thread = NBAPI_Task(data_q, ip, port, 1000, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
+    nbapi_thread = NBAPI_Task(data_q_unused, ip, port, 1000, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
     nbapi_thread.start()
     return f"Connected to {ip}:{port}"
 

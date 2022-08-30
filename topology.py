@@ -6,7 +6,7 @@ from easymesh import BSS
 from easymesh import Station
 
 class Topology():
-    def __init__(self, agents) -> None:
+    def __init__(self, agents: List[Agent]) -> None:
         self.agents = agents
     def __repr__(self) -> str:
         return f"Topology<{id(self)}> agents {pformat(self.agents)}"
