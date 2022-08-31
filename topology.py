@@ -84,3 +84,33 @@ class Topology():
                     if bss.get_bssid() == bssid:
                         return agent.get_id()
         return ""
+
+    def get_ruid_from_sta(self, sta: str) -> str:
+        """Return the RUID that the STA is connected to, if any.
+
+        Args:
+            sta (str): station mac of interest
+
+        Returns:
+            str: RUID that STA is connected to (either VBSS or normal BSS)
+                Empty string if STA is not associated with any RUID
+        """
+        for agent in self.agents:
+            for radio in agent.get_radios():
+                for bss in radio.get_bsses():
+                    for st in bss.get_connected_stations():
+                        if st.get_mac() == sta:
+                            return radio.get_ruid()
+        return ""
+
+    def validate_vbss_move_request(self, station_mac: str, target_ruid: str) -> bool:
+        """Validates that 'station_mac' is not already associated with 'target_ruid', to avoid useless work.
+
+        Args:
+            station_mac (str): The MAC of the STA we want to move.
+            target_ruid (str): The target radio ID to move the VBSS to.
+
+        Returns:
+            bool: True if station_mac is not already living on target_ruid, false otherwise.
+        """
+        return not self.get_ruid_from_sta(station_mac) == target_ruid

@@ -359,11 +359,13 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
         return f"Select a station."
     if not target_id:
         return f"Select a new target."
-    send_client_steering_request(station, target_id)
     if transition_type == 'VBSS':
         target_type = 'RUID'
+        if not g_Topology.validate_vbss_move_request(station, target_id):
+            return f"Station {station} is already connected to {target_id}"
     else:
         target_type = 'BSSID'
+    send_client_steering_request(station, target_id)
     return f"Requesting a {transition_type} transition of STA {station} to {target_type} {target_id}"
 
 if __name__ == '__main__':
