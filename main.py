@@ -163,7 +163,7 @@ app.layout = html.Div([
                             """)),
                             dcc.Dropdown(options=[], id='transition_station', placeholder='Select a station'),
                             dcc.Dropdown(options=[], id='transition_bssid', placeholder='Select a new BSSID.'),
-                            dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", value='VBSS', inline=True),
+                            dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", inline=True),
                             dcc.Interval(id='transition-interval', interval=300, n_intervals=0),
                             html.Button('Transition', id='transition-submit', n_clicks=0),
                             html.Div(id="transition-output", children='Press Transition to begin station transition.')
@@ -327,11 +327,18 @@ def update_graph(unused):
 
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
-              Input('transition-interval', 'n_intervals'))
-def update_transition_dropdown_menus(unused):
+              Output('transition_bssid', 'placeholder'),
+              Input('transition-interval', 'n_intervals'),
+              Input('transition-type-selection', 'value'))
+def update_transition_dropdown_menus(unused, _type):
+    placeholder = 'Select a new BSSID'
     avail_stations = [sta.get_mac() for sta in g_Topology.get_stations()]
-    avail_bssids = [bss.get_bssid() for bss in g_Topology.get_bsses()]
-    return (avail_stations, avail_bssids)
+    if _type is None or _type == 'Client Steering':
+        avail_targets = [bss.get_bssid() for bss in g_Topology.get_bsses()]
+    elif _type == 'VBSS':
+        avail_targets = [radio.get_ruid() for radio in g_Topology.get_radios()]
+        placeholder = 'Select a new RUID'
+    return (avail_stations, avail_targets, placeholder)
 
 @app.callback(
     Output('transition-output', 'children'),

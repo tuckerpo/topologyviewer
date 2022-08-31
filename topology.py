@@ -66,6 +66,12 @@ class Topology():
                     bss_list.append(bss)
         return bss_list
 
+    def get_radios(self) -> List[Radio]:
+        radio_list: List[Radio] = []
+        for agent in self.agents:
+            radio_list = radio_list + agent.get_radios()
+        return radio_list
+
     def get_agent_id_from_bssid(self, bssid) -> str:
         """Return the Agent ID that holds bssid, if any.
 
