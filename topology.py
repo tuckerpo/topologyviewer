@@ -11,6 +11,11 @@ class Topology():
     def __repr__(self) -> str:
         return f"Topology<{id(self)}> agents {pformat(self.agents)}"
     def get_agents(self) -> List[Agent]:
+        """Get all known agent on the network.
+
+        Returns:
+            List[Agent]: All known agents on the network, inclusive of the controller.
+        """
         return self.agents
     def get_connections(self) -> List[Tuple]:
         """Return the connections in the network topology
@@ -50,6 +55,11 @@ class Topology():
         return num_stations
 
     def get_stations(self) -> List[Station]:
+        """Get all known (connection, associated) stations on the network.
+
+        Returns:
+            List[Station]: All known stations connected to some BSS on the network.
+        """
         stations: List[Station] = []
         for agent in self.agents:
             for radio in agent.get_radios():
@@ -59,6 +69,11 @@ class Topology():
         return stations
 
     def get_bsses(self) -> List[BSS]:
+        """Get all known BSSes on the network.
+
+        Returns:
+            List[BSS]: Every known BSS across all radios on all agents.
+        """
         bss_list: List[BSS] = []
         for agent in self.agents:
             for radio in agent.get_radios():
@@ -67,6 +82,11 @@ class Topology():
         return bss_list
 
     def get_radios(self) -> List[Radio]:
+        """Get all known radios on the network.
+
+        Returns:
+            List[Radio]: Every known radio across all agents.
+        """
         radio_list: List[Radio] = []
         for agent in self.agents:
             radio_list = radio_list + agent.get_radios()
