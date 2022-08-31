@@ -24,16 +24,17 @@ app.title = 'CableLabs EasyMesh Network Monitor'
 def network_graph(topology: Topology):
     G = nx.Graph()
     for sta in topology.get_stations():
-        print(f"adding node with station mac {sta.get_mac()}")
+        logging.debug(f"Adding STA node with MAC {sta.get_mac()}")
         G.add_node(sta.get_mac())
         G.nodes()[sta.get_mac()]['params'] = sta.params
     for agent in topology.get_agents():
-        print(f"Adding node with id {agent.get_id()}")
+        logging.debug(f"Adding Agent node with id {agent.get_id()}")
         G.add_node(agent.get_id())
         G.nodes()[agent.get_id()]['params'] = agent.params
         G.nodes[agent.get_id()]['IsController'] = (agent.get_id() == g_controller_id)
     for connection in topology.get_connections():
         bssid, station_mac = connection
+        logging.debug(f"Adding a graph edge between STA {station_mac} and BSSID {bssid}")
         agent_from_bssid = topology.get_agent_id_from_bssid(bssid)
         G.add_edge(agent_from_bssid, station_mac)
     pos = nx.drawing.layout.spring_layout(G)
@@ -294,7 +295,7 @@ def send_client_steering_request(sta_mac: str, new_bssid: str):
     json_payload['station_mac'] = sta_mac
     json_payload['target_bssid'] = new_bssid
     request_string = "ubus call Device.WiFi.DataElements.Network ClientSteering {}".format(json_payload)
-    print(f"TODO: send client steering request, request_string={request_string}")
+    logging.info(f"TODO: send client steering request, request_string={request_string}")
 
 # Component callbacks
 @app.callback(
@@ -308,6 +309,7 @@ def send_client_steering_request(sta_mac: str, new_bssid: str):
 def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, httpauth_pw: str):
     if not n_clicks:
         return ""
+    logging.debug(f"Request to monitor controller at {ip}:{port}")
     if not validate_ipv4(ip):
         return f"IP address '{ip}' seems malformed. Try again."
     if not validate_port(port):
@@ -365,10 +367,15 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
             return f"Station {station} is already connected to {target_id}"
     else:
         target_type = 'BSSID'
+    logging.debug(f"Sending client steering request (type: {transition_type}) from STA {station} to {target_id}")
     send_client_steering_request(station, target_id)
     return f"Requesting a {transition_type} transition of STA {station} to {target_type} {target_id}"
 
 if __name__ == '__main__':
+    # Silence imported module logs
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d_%H:%M:%S')
     app.run_server(debug=True)
     if nbapi_thread:
         nbapi_thread.quit()
