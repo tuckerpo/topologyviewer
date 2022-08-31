@@ -203,19 +203,19 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     # 1. Build the agent list.
     agent_list: List[Agent] = []
     for e in nbapi_json:
-        if re.search(r"\.Device\.\d\.$", e['path']):
+        if re.search(r"\.Device\.\d{1,10}\.$", e['path']):
             agent_list.append(Agent(e['path'], e['parameters']))
 
     # 2. Get Radios, add them to Agents
     for e in nbapi_json:
-        if re.search(r"\.Radio\.\d\.$", e['path']):
+        if re.search(r"\.Radio\.\d{1,10}\.$", e['path']):
             for agent in agent_list:
                 if e['path'].startswith(agent.path):
                     agent.add_radio(Radio(e['path'], e['parameters']))
 
     # 3. Collect BSSs and map them back to radios.
     for e in nbapi_json:
-        if re.search(f"\.BSS\.\d\.$", e['path']):
+        if re.search(r"\.BSS\.\d{1,10}\.$", e['path']):
             for agent in agent_list:
                 for radio in agent.get_radios():
                     if e['path'].startswith(radio.path):
@@ -223,7 +223,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
     # 4. Map Stations to the BSS they're connected to.
     for e in nbapi_json:
-        if re.search(r"\.STA\.\d\.$", e['path']):
+        if re.search(r"\.STA\.\d{1,10}\.$", e['path']):
             for agent in agent_list:
                 for radio in agent.get_radios():
                     for bss in radio.get_bsses():
