@@ -2,6 +2,7 @@ import logging
 import queue
 import re
 import threading
+from enum import Enum
 from pprint import pformat, pprint
 from textwrap import dedent as d
 from time import sleep
@@ -19,19 +20,45 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = 'CableLabs EasyMesh Network Monitor'
 
+class NodeType(Enum):
+    UNKNOWN = 0
+    STATION = 1
+    AGENT = 2
+
+def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
+    # TODO: This will need some massaging for VBSS.
+    station_fmt = "Station: MAC: {} ConnectedTo: {}"
+    agent_fmt = "Agent: Model: {} NumRadios: {}"
+    if node_type == NodeType.STATION:
+        station_obj = topology.get_sta_by_mac(node_id)
+        if not station_obj:
+            return "Station"
+        return station_fmt.format(station_obj.get_mac(), topology.get_bssid_connection_for_sta(station_obj.get_mac()))
+    elif node_type == NodeType.AGENT:
+        agent_obj = topology.get_agent_by_id(node_id)
+        if not agent_obj:
+            return "Agent"
+        return agent_fmt.format(agent_obj.get_manufacturer(), agent_obj.num_radios())
+    else:
+        return "Unknown! This shouldn't happen."
+
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
     G = nx.Graph()
     for sta in topology.get_stations():
-        logging.debug(f"Adding STA node with MAC {sta.get_mac()}")
-        G.add_node(sta.get_mac())
-        G.nodes()[sta.get_mac()]['params'] = sta.params
+        sta_mac = sta.get_mac()
+        logging.debug(f"Adding STA node with MAC {sta_mac}")
+        G.add_node(sta_mac)
+        G.nodes()[sta_mac]['params'] = sta.params
+        G.nodes()[sta_mac]['type'] = NodeType.STATION
     for agent in topology.get_agents():
-        logging.debug(f"Adding Agent node with id {agent.get_id()}")
-        G.add_node(agent.get_id())
-        G.nodes()[agent.get_id()]['params'] = agent.params
-        G.nodes[agent.get_id()]['IsController'] = (agent.get_id() == g_controller_id)
+        a_id = agent.get_id()
+        logging.debug(f"Adding Agent node with id {a_id}")
+        G.add_node(a_id)
+        G.nodes()[a_id]['params'] = agent.params
+        G.nodes[a_id]['IsController'] = (a_id == g_controller_id)
+        G.nodes()[a_id]['type'] = NodeType.AGENT
     for connection in topology.get_connections():
         bssid, station_mac = connection
         logging.debug(f"Adding a graph edge between STA {station_mac} and BSSID {bssid}")
@@ -78,12 +105,7 @@ def network_graph(topology: Topology):
 
     node_text = []
     for node in G.nodes():
-        if 'MACAddress' in G.nodes()[node]['params']:
-            node_text.append({"Station": {"MAC": G.nodes()[node]['params']['MACAddress']}})
-        elif 'IsController' in G.nodes()[node]:
-            node_text.append({"Controller": {"Type": G.nodes()[node]['params']['ManufacturerModel'], 'MAC': G.nodes()[node]['params']['ID']}})
-        else:
-            node_text.append(G.nodes()[node]['params'])
+        node_text.append(gen_node_text(g_Topology, node, G.nodes()[node]['type']))
     node_trace.marker.color = ['green' if 'IsController' in G.nodes()[node] and G.nodes()[node]['IsController'] else 'red' for node in G.nodes()]
     # Make Controller node slightly larger, as it's likely going to have the highest adjacency degree in actual networks.
     node_trace.marker.size = [35 if 'IsController' in G.nodes()[node] and G.nodes()[node]['IsController'] else 20 for node in G.nodes()]

@@ -54,3 +54,7 @@ class Agent():
         return self.radios
     def num_radios(self) -> int:
         return len(self.radios)
+    def get_manufacturer(self) -> str:
+        if 'ManufacturerModel' in self.params:
+            return self.params['ManufacturerModel']
+        return ''

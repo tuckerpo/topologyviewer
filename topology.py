@@ -40,6 +40,13 @@ class Topology():
         """
         return len(self.get_connections())
 
+    def get_sta_by_mac(self, mac) -> Station:
+        stations = self.get_stations()
+        for station in stations:
+            if station.get_mac() == mac:
+                return station
+        return None
+
     def get_num_stations_total(self) -> int:
         """Total number of connected, associated stations in the network topology.
         TODO: this should eventually account for unassociated stations as well.
@@ -134,3 +141,23 @@ class Topology():
             bool: True if station_mac is not already living on target_ruid, false otherwise.
         """
         return not self.get_ruid_from_sta(station_mac) == target_ruid
+
+    def get_bssid_connection_for_sta(self, sta_mac) -> str:
+        """Get the BSSID that the STA is connected to, if any.
+
+        Args:
+            sta_mac (str): MAC address of the STA
+
+        Returns:
+            str: BSSID that STA is connected to, or empty string.
+        """
+        for connection in self.get_connections():
+            if connection[1] == sta_mac:
+                return connection[0]
+        return ""
+
+    def get_agent_by_id(self, agent_id) -> Agent:
+        for agent in self.agents:
+            if agent.get_id() == agent_id:
+                return agent
+        return None
