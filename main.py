@@ -325,6 +325,11 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
 def update_graph(unused):
     return network_graph(g_Topology)
 
+@app.callback(Output('transition_bssid', 'value'),
+              Input('transition-type-selection', 'value'))
+def on_transition_type_choice_click(_type):
+    return ""
+
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
               Output('transition_bssid', 'placeholder'),
