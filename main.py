@@ -352,16 +352,19 @@ def update_transition_dropdown_menus(unused, _type):
     State('transition_bssid', 'value'),
     State('transition-type-selection', 'value'),
 )
-def on_transition_click(n_clicks: int, station: str, bssid: str, transition_type: str):
-    # TODO If the radial button for VBSS is selected, we should prompt to move a station to a new AP via Agent ID, not BSSID.
+def on_transition_click(n_clicks: int, station: str, target_id: str, transition_type: str):
     if not n_clicks:
         return f"Click Transition to begin."
     if not station:
         return f"Select a station."
-    if not bssid:
-        return f"Select a new BSSID."
-    send_client_steering_request(station, bssid)
-    return f"Requesting a {transition_type} transition of STA {station} to BSSID {bssid}"
+    if not target_id:
+        return f"Select a new target."
+    send_client_steering_request(station, target_id)
+    if transition_type == 'VBSS':
+        target_type = 'RUID'
+    else:
+        target_type = 'BSSID'
+    return f"Requesting a {transition_type} transition of STA {station} to {target_type} {target_id}"
 
 if __name__ == '__main__':
     app.run_server(debug=True)
