@@ -14,8 +14,11 @@ class BSS():
         self.path = path
         self.params = params
         self.connected_stations: List[Station] = []
+        self.connected_sta_key = 'STA(s)'
+        self.params[self.connected_sta_key] = []
     def add_connected_station(self, station) -> None:
         self.connected_stations.append(station)
+        self.params[self.connected_sta_key].append(station.params)
     def get_num_connected_stations(self) -> int:
         return len(self.connected_stations)
     def get_connected_stations(self) -> List[Station]:
@@ -30,8 +33,11 @@ class Radio():
         self.path = path
         self.params = params
         self.bsses: List[BSS] = []
+        self.bss_key = 'BSS'
+        self.params[self.bss_key] = []
     def add_bss(self, bss) -> None:
         self.bsses.append(bss)
+        self.params[self.bss_key].append(bss.params)
     def get_ruid(self) -> str:
         if 'ID' in self.params:
             return self.params['ID']
@@ -44,8 +50,11 @@ class Agent():
         self.path = path
         self.params = params
         self.radios: List[Radio] = []
+        self.radios_key = 'Radios'
+        self.params[self.radios_key] = []
     def add_radio(self, radio) -> None:
         self.radios.append(radio)
+        self.params[self.radios_key].append(radio.params)
     def get_id(self) -> str:
         if 'ID' in self.params:
             return self.params['ID']
