@@ -202,7 +202,7 @@ app.layout = html.Div([
                             html.Button('Transition', id='transition-submit', n_clicks=0),
                             html.Div(id="transition-output", children='Press Transition to begin station transition.')
                         ],
-                        style={'height': '400px'}),
+                        style={'height': '300px'}),
                     html.Div(
                         className='twelve columns',
                         children=[
