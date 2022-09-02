@@ -1,3 +1,4 @@
+import json
 import logging
 import queue
 import re
@@ -25,6 +26,9 @@ class NodeType(Enum):
     STATION = 1
     AGENT = 2
 
+
+point_number_to_obj = {}
+
 def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
     # TODO: This will need some massaging for VBSS.
     station_fmt = "Station: MAC: {} ConnectedTo: {}"
@@ -45,15 +49,20 @@ def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
+    point = 0
     G = nx.Graph()
     for sta in topology.get_stations():
         sta_mac = sta.get_mac()
         logging.debug(f"Adding STA node with MAC {sta_mac}")
+        point_number_to_obj[point] = sta
+        point = point + 1
         G.add_node(sta_mac)
         G.nodes()[sta_mac]['params'] = sta.params
         G.nodes()[sta_mac]['type'] = NodeType.STATION
     for agent in topology.get_agents():
         a_id = agent.get_id()
+        point_number_to_obj[point] = agent
+        point = point + 1
         logging.debug(f"Adding Agent node with id {a_id}")
         G.add_node(a_id)
         G.nodes()[a_id]['params'] = agent.params
@@ -192,8 +201,19 @@ app.layout = html.Div([
                             html.Div(id="transition-output", children='Press Transition to begin station transition.')
                         ],
                         style={'height': '400px'}),
+                    html.Div(
+                        className='twelve columns',
+                        children=[
+                            dcc.Markdown(d("""
+                            **Node Data**
+
+                            Click on a node for details.
+                            """)),
+                            html.Pre(id='node-click', style=styles['pre'])
+                        ],
+                        style={'height': '400px'})
                 ]
-            )
+            ),
         ]
     )
 ])
@@ -392,6 +412,14 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
     logging.debug(f"Sending client steering request (type: {transition_type}) from STA {station} to {target_id}")
     send_client_steering_request(station, target_id)
     return f"Requesting a {transition_type} transition of STA {station} to {target_type} {target_id}"
+
+
+@app.callback(Output('node-click', 'children'),
+              Input('my-graph', 'clickData'))
+def node_click(clickData):
+    if not clickData:
+        return ""
+    return json.dumps(point_number_to_obj[clickData['points'][0]['pointNumber']].params, indent=2)
 
 if __name__ == '__main__':
     # Silence imported module logs
