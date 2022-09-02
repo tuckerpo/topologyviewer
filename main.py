@@ -121,6 +121,8 @@ def network_graph(topology: Topology):
     node_trace.text = node_text
     fig = go.Figure(data=[edge_trace, node_trace],
                 layout=go.Layout(
+                    # TODO: height (and width) should probably come from viewport calculation.
+                    height=800,
                     titlefont_size=16,
                     showlegend=False,
                     hovermode='closest',
