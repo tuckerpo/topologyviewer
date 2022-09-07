@@ -9,7 +9,7 @@ located at `/etc/lighttpd/lighttpd.conf`
 - Configure the firewall to allow incoming requests
     - `ubus-cli Firewall.X_Prpl_Service.+{Alias="serviceelements",Action="Accept",DestinationPort="<your_port_here>",Enable=1,IPVersion=4,Interface="<your_interface_here>",Protocol="TCP"}`
 
-To test whether or not the HTTP<->Ambiorix proxy is running, and the port is open do:
+To test whether or not the HTTP<->Ambiorix proxy is running, and the port is open, do:
 
 `curl -u username:pass "http://<controller_ip>:<controller_port>/serviceElements/Device."`
 
