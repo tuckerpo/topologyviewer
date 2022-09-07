@@ -96,14 +96,19 @@ def network_graph(topology: Topology):
 
     node_x = []
     node_y = []
+    node_labels = []
+    node_hover_text = []
     for node in G.nodes():
         x, y = G.nodes[node]['pos']
         node_x.append(x)
         node_y.append(y)
+        node_labels.append(node)
+        node_hover_text.append(gen_node_text(g_Topology, node, G.nodes()[node]['type']))
 
     node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers',
+        x=node_x, y=node_y, text=node_labels,
+        hovertext=node_hover_text,
+        mode='markers+text',
         hoverinfo='text',
         marker=dict(
             colorscale='Electric',
@@ -112,13 +117,9 @@ def network_graph(topology: Topology):
             size=10,
             line_width=2))
 
-    node_text = []
-    for node in G.nodes():
-        node_text.append(gen_node_text(g_Topology, node, G.nodes()[node]['type']))
     node_trace.marker.color = ['red' if not G.nodes()[node]['type'] == NodeType.AGENT else 'green' for node in G.nodes()]
     # Make Controller node slightly larger, as it's likely going to have the highest adjacency degree in actual networks.
     node_trace.marker.size = [35 if 'IsController' in G.nodes()[node] and G.nodes()[node]['IsController'] else 20 for node in G.nodes()]
-    node_trace.text = node_text
     fig = go.Figure(data=[edge_trace, node_trace],
                 layout=go.Layout(
                     # TODO: height (and width) should probably come from viewport calculation.
