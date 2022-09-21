@@ -345,11 +345,20 @@ def validate_port(port: str):
 
 def send_client_steering_request(sta_mac: str, new_bssid: str):
     # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
-    json_payload = {}
-    json_payload['station_mac'] = sta_mac
-    json_payload['target_bssid'] = new_bssid
-    request_string = "ubus call Device.WiFi.DataElements.Network ClientSteering {}".format(json_payload)
-    logging.info(f"TODO: send client steering request, request_string={request_string}")
+    json_payload = {"sendresp": True,
+                    "commandKey": "",
+                    "command": "Device.WiFi.DataElements.Network.ClientSteering",
+                    "inputArgs": {"station_mac": sta_mac,
+                                  "target_bssid": new_bssid}}
+    # TODO: handle IP and ports properly
+    url = "http://{}:{}/commands".format("127.0.0.1", "9999")
+    # TODO: handle the auth properly
+    auth=('admin', 'admin')
+    nbapi_root_request_response = requests.post(url=url, auth=auth, timeout=3, json=json_payload)
+    # TODO: proper error handling
+    logging.info(f"Sent client steering request, cmd={str(json_payload)}")
+    if not nbapi_root_request_response.ok:
+        logging.error("Something went wrong went sending the steering request\n: {str(nbapi_root_request_response)}")
 
 # Component callbacks
 @app.callback(
