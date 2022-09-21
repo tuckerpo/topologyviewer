@@ -1,6 +1,5 @@
 import json
 import logging
-import queue
 import re
 import threading
 from enum import Enum
@@ -304,20 +303,29 @@ class HTTPBasicAuthParams():
     def __repr__(self) -> str:
         return f"HTTPBasicAuthParams: username: {self.user}, pass: {self.pw}"
 
-data_q_unused = queue.Queue()
-
-class NBAPI_Task(threading.Thread):
-    def __init__(self, data_q_unused, ip: str, port: str, cadence_ms: int = 1000, auth_params: HTTPBasicAuthParams = None):
-        super().__init__()
-        self.data_q = data_q_unused
+class ControllerConnectionCtx():
+    def __init__(self, ip: str, port: str, auth: HTTPBasicAuthParams) -> None:
+        if not auth:
+            raise ValueError("Passed a None auth object.")
         self.ip = ip
         self.port = port
+        self.auth = auth
+
+g_ControllerConnectionCtx = None
+
+class NBAPI_Task(threading.Thread):
+    def __init__(self, connection_ctx: ControllerConnectionCtx, cadence_ms: int = 1000):
+        if not connection_ctx:
+            raise ValueError("Passed a None connection context.")
+        super().__init__()
+        self.ip = connection_ctx.ip
+        self.port = connection_ctx.port
         self.cadence_ms = cadence_ms
         self.quitting = False
-        if not auth_params:
+        if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
-            self.auth=(auth_params.user, auth_params.pw)
+            self.auth=(connection_ctx.auth.user, connection_ctx.auth.pw)
     # Override threading.Thread.run(self)->None
     def run(self):
         while not self.quitting:
@@ -343,22 +351,21 @@ def validate_ipv4(ip: str):
 def validate_port(port: str):
     return re.match(r'^\d{1,5}$', port) and int(port) > 0 and int(port) < 65535
 
-def send_client_steering_request(sta_mac: str, new_bssid: str):
+def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
+    if not conn_ctx:
+        raise ValueError("Passed a None connection context.")
     # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
     json_payload = {"sendresp": True,
                     "commandKey": "",
                     "command": "Device.WiFi.DataElements.Network.ClientSteering",
                     "inputArgs": {"station_mac": sta_mac,
                                   "target_bssid": new_bssid}}
-    # TODO: handle IP and ports properly
-    url = "http://{}:{}/commands".format("127.0.0.1", "9999")
-    # TODO: handle the auth properly
-    auth=('admin', 'admin')
-    nbapi_root_request_response = requests.post(url=url, auth=auth, timeout=3, json=json_payload)
+    url = "http://{}:{}/commands".format(conn_ctx.ip, conn_ctx.port)
+    nbapi_root_request_response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
     # TODO: proper error handling
     logging.info(f"Sent client steering request, cmd={str(json_payload)}")
     if not nbapi_root_request_response.ok:
-        logging.error("Something went wrong went sending the steering request\n: {str(nbapi_root_request_response)}")
+        logging.error(f"Something went wrong when sending the steering request\n: {str(nbapi_root_request_response)}")
 
 # Component callbacks
 @app.callback(
@@ -381,7 +388,9 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
     if nbapi_thread:
         nbapi_thread.quit()
     logging.debug(f"Starting NBAPI task at {ip}:{port}")
-    nbapi_thread = NBAPI_Task(data_q_unused, ip, port, 1000, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
+    global g_ControllerConnectionCtx
+    g_ControllerConnectionCtx = ControllerConnectionCtx(ip, port, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
+    nbapi_thread = NBAPI_Task(g_ControllerConnectionCtx, cadence_ms=1000)
     nbapi_thread.start()
     return f"Connected to {ip}:{port}"
 
@@ -431,7 +440,7 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
     else:
         target_type = 'BSSID'
     logging.debug(f"Sending client steering request (type: {transition_type}) from STA {station} to {target_id}")
-    send_client_steering_request(station, target_id)
+    send_client_steering_request(g_ControllerConnectionCtx, station, target_id)
     return f"Requesting a {transition_type} transition of STA {station} to {target_type} {target_id}"
 
 
