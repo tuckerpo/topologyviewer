@@ -31,8 +31,6 @@ To test whether or not the HTTP<->Ambiorix proxy is running, and the port is ope
 
 ## **TODO:**
 
-- Client steering is a stub. Making a `ubus` call over the `amx-fcgi` interface is not documented. I'm sure it's possible.
-
 - Unassociated stations. Not handled in the UI, because they're not handled in prplMesh itself.
 
 - RSSI/time plotting, to visualize VBSS switching decisions. Good for a demo.
