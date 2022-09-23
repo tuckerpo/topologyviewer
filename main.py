@@ -171,14 +171,14 @@ app.layout = html.Div([
 
                             Input the IP and Port of the Controller in the EasyMesh network to visualize.
                             """)),
-                            dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1"),
-                            dcc.Input(id="port_input", type="text", placeholder="8080"),
+                            dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value='192.168.250.171'),
+                            dcc.Input(id="port_input", type="text", placeholder="8080", value='8080'),
                             dcc.Markdown(d("""
                             **HTTP Basic Auth Params**
                             Username and password for the HTTP proxy.
                             """)),
-                            dcc.Input(id='httpauth_user', type='text', placeholder='admin'),
-                            dcc.Input(id='httpauth_pass', type='text', placeholder='admin'),
+                            dcc.Input(id='httpauth_user', type='text', placeholder='admin', value='admin'),
+                            dcc.Input(id='httpauth_pass', type='text', placeholder='admin', value='admin'),
                             html.Button('Submit', id='submit-val', n_clicks=0),
                             html.Div(id="output", children='Press Submit to connect')
                         ],
