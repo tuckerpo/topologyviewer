@@ -104,15 +104,18 @@ def network_graph(topology: Topology):
         x, y = G.nodes[node]['pos']
         node_x.append(x)
         node_y.append(y)
-        node_labels.append(node)
         node_hover_text.append(gen_node_text(g_Topology, node, G.nodes()[node]['type']))
         if G.nodes()[node]['type'] == NodeType.AGENT:
-            node_colors.append('green')
             if G.nodes()[node]['IsController']:
-                node_sizes.append(35)
+                node_sizes.append(40)
+                node_colors.append('#AA29C5')
+                node_labels.append("C: " + G.nodes()[node]['params']["Manufacturer"]) #node)
             else:
+                node_labels.append("A: " + G.nodes()[node]['params']["Manufacturer"])
+                node_colors.append('green')
                 node_sizes.append(30)
         else:
+            node_labels.append("S: " + G.nodes()[node]['params']["MACAddress"][-2::])
             node_colors.append('red')
             node_sizes.append(20)
 
@@ -139,6 +142,7 @@ def network_graph(topology: Topology):
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
                     )
+    fig.update_traces(textposition='top center', textfont_size=16)
     return fig
 
 
