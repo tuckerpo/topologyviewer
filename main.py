@@ -16,8 +16,7 @@ from dash import Dash, Input, Output, State, dcc, html
 from easymesh import BSS, Agent, Radio, Station
 from topology import Topology
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
 
 class NodeType(Enum):
