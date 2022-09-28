@@ -6,8 +6,17 @@ from easymesh import BSS
 from easymesh import Station
 
 class Topology():
-    def __init__(self, agents: List[Agent]) -> None:
+    def __init__(self, agents: List[Agent], controllerID: str) -> None:
         self.agents = agents
+        self.controllerID = controllerID
+        self.controller = {}
+
+        # Mark the controller
+        for agent in agents:
+            if agent.get_id() == controllerID:
+                agent.isController = True
+                self.controller = agent
+
     def __repr__(self) -> str:
         return f"Topology<{id(self)}> agents {pformat(self.agents)}"
     def get_agents(self) -> List[Agent]:
@@ -17,6 +26,27 @@ class Topology():
             List[Agent]: All known agents on the network, inclusive of the controller.
         """
         return self.agents
+    def get_agent_from_hash(self, hash: str) -> Agent:
+        """Gets an agent with given hashed ID
+
+        Returns:
+            Agent: The agent with hashed ID
+        """
+        for a in self.agents:
+            if a.get_hash_id() == hash:
+                return a
+        return None
+    def get_station_from_hash(self, hash: str) -> Agent:
+        """Gets a station with given hashed MAC
+
+        Returns:
+            Station: The station with hashed MAC
+        """
+        for a in self.agents:
+            for sta in a.get_connected_stations():
+                if sta.get_hash_mac() == hash:
+                    return sta
+        return None
     def get_connections(self) -> List[Tuple]:
         """Return the connections in the network topology
 
@@ -160,4 +190,9 @@ class Topology():
         for agent in self.agents:
             if agent.get_id() == agent_id:
                 return agent
+        return None
+
+    def get_controller(self) -> Agent:
+        if self.controller:
+            return self.controller
         return None
