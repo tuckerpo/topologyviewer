@@ -47,12 +47,17 @@ class Station():
         self.params = params
         self.x = 0
         self.y = 0
+        self.is_steered = False
     def get_mac(self) -> str:
         if 'MACAddress' in self.params:
             return self.params['MACAddress']
         return ''
     def get_hash_mac(self) -> str:
         return hashlib.md5(self.get_mac().encode()).hexdigest()
+    def get_steered(self) -> bool:
+        return self.is_steered
+    def set_steered(self, steered: bool) -> None:
+        self.is_steered = steered
 
 class BSS():
     def __init__(self, path, params) -> None:
@@ -131,6 +136,17 @@ class Interface():
     def get_neighbors(self) -> List[Neighbor]:
         return self.neighbors
     def add_child(self, interface) -> None:
+        # Datamodel/ GL-inet bug
+        # There will be some links in the datamodel between interfaces of a different media type (Ethernet<>Wireless)
+        # When this happens, mark both interfaces as the same media type.
+        if self.params["wireless"] and not interface.params["wireless"]:
+            interface.params["MediaTypeString"] = self.params["MediaTypeString"]
+            interface.params["wired"] = self.params["wired"]
+            interface.params["wireless"] = self.params["wireless"]
+        elif interface.params["wireless"] and not self.params["wireless"]:
+            self.params["MediaTypeString"] = interface.params["MediaTypeString"]
+            self.params["wired"] = interface.params["wired"]
+            self.params["wireless"] = interface.params["wireless"]
         self.children.append(interface)
         self.params[self.children_key].append(interface.params)
         # Sort children by ID
@@ -138,6 +154,11 @@ class Interface():
         self.params[self.children_key].sort(key=lambda n: n["MACAddress"])
     def get_children(self):
         return self.children
+    def is_child(self, macAddress) -> bool:
+        for iface in self.children:
+            if iface.params["MACAddress"] == macAddress:
+                return True
+        return False
     def set_parent_agent(self, agent) -> None:
         self.parentAgent = agent
     def get_parent_agent(self):
@@ -167,6 +188,12 @@ class Agent():
         self.children.sort(key=lambda n: n.get_id())
     def get_children(self):
         return self.children
+    def is_child(self, macAddress):
+        is_child = False
+        for i in self.interfaces:
+            if i.is_child(macAddress):
+                is_child = True
+        return is_child
     def num_children(self):
         return len(self.get_interfaces()) + len(self.get_connected_stations())
     def add_radio(self, radio) -> None:
@@ -177,9 +204,12 @@ class Agent():
         self.params[self.interfaces_key].append(interface.params)
         self.interfaces.sort(key=lambda n: n.params["wired"])
     def sort_interfaces(self) -> None:
-        def compare_interface_horizontal_coordinates(interface):
-            return #interface
-        #self.interfaces.sort(key=compare_interface_horizontal_coordinates)
+        def compare_interface_horizontal_coordinates(interface: Interface):
+            x_coord = self.x
+            if interface.get_children():
+                x_coord = interface.get_children()[0].get_parent_agent().x
+            return x_coord
+        self.interfaces.sort(key=compare_interface_horizontal_coordinates)
     def add_connected_station(self, station) -> None:
         self.connected_stations.append(station)
     def get_connected_stations(self) -> List[Station]:

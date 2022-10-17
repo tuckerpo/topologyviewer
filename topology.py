@@ -36,7 +36,7 @@ class Topology():
             if a.get_hash_id() == hash:
                 return a
         return None
-    def get_station_from_hash(self, hash: str) -> Agent:
+    def get_station_from_hash(self, hash: str) -> Station:
         """Gets a station with given hashed MAC
 
         Returns:
@@ -196,3 +196,8 @@ class Topology():
         if self.controller:
             return self.controller
         return None
+
+    def get_ssid(self) -> str:
+        if self.controller:
+            return self.controller.get_radios()[0].get_bsses()[0].params["SSID"]
+        return "No SSID found"
