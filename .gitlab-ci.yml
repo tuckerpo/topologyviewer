@@ -31,8 +31,12 @@ pylint:
   stage: static_analysis
   script:
     # ignore C0301 -- "Line too long"
-    pylint -d C0301 *.py
+    pylint -d C0301 *.py > pylint_output.txt
   allow_failure: true
+  artifacts:
+    paths:
+      - pylint_output.txt
+    when: always
 
 unit_tests:
   stage: tests
