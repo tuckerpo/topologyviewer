@@ -441,13 +441,26 @@ app.layout = html.Div([
                             html.Br(),
                             dcc.Markdown(d("""
                             **Easymesh credentials**
-                            
+
                             SSID of the prplMesh network
                             """)),
-                            dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True)
+                            dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True),
+                            dcc.Markdown(d("""
+                            **Create VBSS**
+
+                            Create a Virtual BSS.
+                            """)),
+                            dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
+                            dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
+                            dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
+                            dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
+                            html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
+                            html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
+                            html.Br(),
+                            html.Br(),
                         ],
                         style={'height': '300px'}
-                    )
+                    ),
                 ]
             ),
             html.Div(
