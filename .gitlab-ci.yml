@@ -1,0 +1,36 @@
+image: python:latest
+
+variables:
+  pip3_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip3
+    - venv/
+
+before_script:
+  - python3 --version
+  - pip3 install virtualenv
+  - virtualenv venv
+  - source venv/bin/activate
+  - pip3 install -r requirements.txt
+  - pip3 install pylint
+
+stages:
+  - static_analysis
+  - tests
+
+pylint:
+  stage: static_analysis
+  script:
+    # ignore C0301 -- "Line too long"
+    pylint -d C0301 *.py
+  allow_failure: true
+
+unit_tests:
+  stage: tests
+  script:
+    - echo "Running unit tests"
+    - python3 -m unittest
+
+
