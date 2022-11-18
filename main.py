@@ -724,6 +724,32 @@ def validate_ipv4(ip: str):
 def validate_port(port: str):
     return re.match(r'^\d{1,5}$', port) and int(port) > 0 and int(port) < 65535
 
+def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, device_idx: int, radio_idx: int):
+    """Sends a VBSS creation request to an NBAPI Radio endpoint.
+
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection to the topology's controller
+        vbssid (str): The VBSSID of the VBSS to make.
+        client_mac (str): The MAC address of the client that this VBSS is for.
+        ssid (str): The SSID of the VBSS.
+        password (str): The password for the VBSS.
+        device_idx (int): The NBAPI Device index.("Device.WiFi.DataElements.Network.Device.n")
+        radio_idx (int): The NBAPI Radio index. ("Device.WiFi.DataElements.Network.Device.1.Radio.n")
+
+    Raises:
+        ValueError: Throws if not provided a valid ControllerConnectionCtx
+    """
+    if not conn_ctx:
+        raise ValueError()
+    json_payload = {"sendresp": True,
+                    "commandKey": "",
+                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
+                    "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
+    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
+    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
+    if not response.ok:
+        logging.error("Could not send VBSS creation request")
+
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
