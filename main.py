@@ -895,9 +895,10 @@ def node_click(clickData):
               State('vbss-ssid', 'value'),
               State('vbss-pw', 'value'),
               State('vbss-creation-client-mac', 'value'),
-              State('vbss-creation-vbssid', 'value')
+              State('vbss-creation-vbssid', 'value'),
+              State('vbss-creation-ruid', 'value')
 )
-def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str, vbssid: str):
+def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str, vbssid: str, ruid: str):
     """Callback for VBSS Creation Button click
 
     Args:
@@ -920,6 +921,8 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
         return "Enter a VBSSID"
     if client_mac is None:
         return "Select a station"
+    if ruid is None:
+        return "Select a Radio to create the VBSS on."
     is_password_valid, password_error = validation.validate_vbss_password_for_creation(password)
     if not is_password_valid:
         return f"Invalid password: {password_error}"
