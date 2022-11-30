@@ -455,6 +455,8 @@ app.layout = html.Div([
                             dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
                             dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
                             dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
+                            dcc.Dropdown(options=[], id='vbss-creation-ruid', placeholder='Select a RUID.'),
+                            dcc.Interval(id='vbss-creation-interval', interval=300, n_intervals=0),
                             html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
                             html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
                             html.Br(),
@@ -837,6 +839,17 @@ def update_transition_dropdown_menus(unused, _type):
         avail_targets = [radio.get_ruid() for radio in g_Topology.get_radios()]
         placeholder = 'Select a new RUID'
     return (avail_stations, avail_targets, placeholder)
+
+@app.callback(Output('vbss-creation-ruid', 'options'),
+              Input('vbss-creation-interval', 'n_intervals')
+)
+def update_vbss_creation_ruid_dropdown(_):
+    """Populates the RUID dropdown field for creating a VBSS.
+    """
+    available_radio_uids = [radio.get_ruid() for radio in g_Topology.get_radios()]
+    if len(available_radio_uids):
+        return available_radio_uids
+    return []
 
 @app.callback(
     Output('transition-output', 'children'),
