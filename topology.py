@@ -201,3 +201,17 @@ class Topology():
         if self.controller:
             return self.controller.get_radios()[0].get_bsses()[0].params["SSID"]
         return "No SSID found"
+
+    def get_radio_by_ruid(self, ruid: str) -> Radio:
+        """Look up a Radio object by Radio UID
+
+        Args:
+            ruid (str): The RUID
+
+        Returns:
+            Radio: The Radio object corresponding to ruid if found, None otherwise
+        """
+        for radio in self.get_radios():
+            if radio.get_ruid() == ruid:
+                return radio
+        return None
