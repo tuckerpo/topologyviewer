@@ -815,6 +815,14 @@ def on_transition_type_choice_click(_type):
 def update_prplmesh_ssid(unused):
     return g_Topology.get_ssid()
 
+@app.callback(Output('vbss-creation-client-mac', 'options'),
+              Input('vbss-creation-interval', 'n_intervals')
+)
+def update_stations(_):
+    """Populates the available station list for the client MAC field of a VBSS creation request.
+    """
+    return [sta.get_mac() for sta in g_Topology.get_stations()]
+
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
               Output('transition_bssid', 'placeholder'),
