@@ -17,6 +17,7 @@ from dash import Dash, Input, Output, State, dcc, html
 
 from easymesh import BSS, Agent, Radio, Station, Interface, Neighbor, ORIENTATION
 from topology import Topology
+import validation
 
 app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
@@ -54,7 +55,7 @@ def add_children_to_graph_recursive(agent: Agent, graph):
         graph.nodes()[child.get_hash_id()]['type'] = NodeType.AGENT
         #graph.nodes()[child.get_hash_id()]['params'] = child.params
         add_children_to_graph_recursive(child, graph)
-    
+
     for sta in agent.get_connected_stations():
         marker_references.append(sta.get_hash_mac())
         graph.add_node(sta.get_hash_mac())
@@ -165,7 +166,7 @@ def network_graph(topology: Topology):
                     G.add_edge(child_iface.get_parent_agent().get_hash_id(), ifc.get_parent_agent().get_hash_id())
                     # G.nodes()[child_iface.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
                     # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
-            
+
             if ifc.get_connected_stations():
                 for sta in ifc.get_connected_stations():
                     G.add_edge(sta.get_hash_mac(), ifc.get_parent_agent().get_hash_id())
@@ -190,7 +191,7 @@ def network_graph(topology: Topology):
             if station:
                 station.x = x
                 station.y = y
-            
+
     node_x = []
     node_y = []
     node_labels = []
@@ -290,7 +291,7 @@ def network_graph(topology: Topology):
         node_colors.extend(o['node_colors'])
         node_sizes.extend(o['node_sizes'])
         node_symbols.extend(o['node_symbols'])
-    
+
     node_ifaces = go.Scatter(
         x=node_x, y=node_y, text=node_labels,
         hovertext=node_hover_text,
@@ -347,7 +348,7 @@ def network_graph(topology: Topology):
 
     fig = go.Figure(data=[edge_trace, node_trace, node_ifaces, edge_trace_interfaces_ethernet, edge_trace_interfaces_wifi, edge_trace_interfaces_wifi_fronthaul], layout=layout)
     fig.update_traces(textposition='middle right', textfont_size=14) # , marker_symbol="diamond")
-    
+
     # Add legend image
     legendImage = Image.open("legend_small.png")
     fig.add_layout_image(
@@ -364,7 +365,7 @@ def network_graph(topology: Topology):
         opacity=0.8,
         layer="above")
     )
-    
+
     fig.update()
 
     # "Zoom out"/autorange the graph, by scaling the calculated autorange
@@ -441,13 +442,28 @@ app.layout = html.Div([
                             html.Br(),
                             dcc.Markdown(d("""
                             **Easymesh credentials**
-                            
+
                             SSID of the prplMesh network
                             """)),
-                            dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True)
+                            dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True),
+                            dcc.Markdown(d("""
+                            **Create VBSS**
+
+                            Create a Virtual BSS.
+                            """)),
+                            dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
+                            dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
+                            dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
+                            dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
+                            dcc.Dropdown(options=[], id='vbss-creation-ruid', placeholder='Select a RUID.'),
+                            dcc.Interval(id='vbss-creation-interval', interval=300, n_intervals=0),
+                            html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
+                            html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
+                            html.Br(),
+                            html.Br(),
                         ],
                         style={'height': '300px'}
-                    )
+                    ),
                 ]
             ),
             html.Div(
@@ -508,7 +524,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
     if type(nbapi_json) is not list:
-        return Topology({})
+        return Topology({}, {})
 
     # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're done figuring things out.
 
@@ -562,7 +578,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             controller_backhaul_interface = iface
                             controller_backhaul_interface.orientation = ORIENTATION.DOWN
                             break
-                    
+
 
     # 4. Link interfaces to parents
     for e in nbapi_json:
@@ -571,7 +587,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                 continue
 
             # Ethernet backhaul connections must always link to the controller
-            if e['parameters']['LinkType'] == "Ethernet": 
+            if e['parameters']['LinkType'] == "Ethernet":
                 # Search for backhaul interface on the device that is getting processed
                 for iface in interface_list:
                     if iface.params['MACAddress'] == e['parameters']['MACAddress']:
@@ -580,7 +596,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         controller_agent.add_child(iface.get_parent_agent())
 
 
-            elif e['parameters']['LinkType'] == "Wi-Fi": 
+            elif e['parameters']['LinkType'] == "Wi-Fi":
                 for childIface in interface_list:
                     if childIface.params['MACAddress'] == e['parameters']['MACAddress']: # interface on device that is getting processed
                         for parentIface in interface_list:
@@ -613,7 +629,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             # if e['parameters']['BSSID'] == iface.params['MACAddress']:
                             #    bss.interface = iface
                             #    break
-                            
+
     # 7. Map Stations to the BSS they're connected to.
     station_list: List[Station] = []
     for e in nbapi_json:
@@ -656,7 +672,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     #         if ifc.get_connected_stations():
     #             for sta in ifc.get_connected_stations():
     #                 print(f'\tSTATION: {sta.get_mac()} is connected to: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
-        
+
     # for a in agent_list:
     #     print_conns(a)
 
@@ -701,7 +717,7 @@ class NBAPI_Task(threading.Thread):
             # DEBUG: Load previously dumped JSON response
             # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
             #     nbapi_root_json_blob = json.loads(f.read())
-            
+
             nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=3)
             if not nbapi_root_request_response.ok:
                 break
@@ -718,11 +734,31 @@ class NBAPI_Task(threading.Thread):
 
 nbapi_thread = None
 
-def validate_ipv4(ip: str):
-    return re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip)
+def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, device_idx: int, radio_idx: int):
+    """Sends a VBSS creation request to an NBAPI Radio endpoint.
 
-def validate_port(port: str):
-    return re.match(r'^\d{1,5}$', port) and int(port) > 0 and int(port) < 65535
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection to the topology's controller
+        vbssid (str): The VBSSID of the VBSS to make.
+        client_mac (str): The MAC address of the client that this VBSS is for.
+        ssid (str): The SSID of the VBSS.
+        password (str): The password for the VBSS.
+        device_idx (int): The NBAPI Device index.("Device.WiFi.DataElements.Network.Device.n")
+        radio_idx (int): The NBAPI Radio index. ("Device.WiFi.DataElements.Network.Device.1.Radio.n")
+
+    Raises:
+        ValueError: Throws if not provided a valid ControllerConnectionCtx
+    """
+    if not conn_ctx:
+        raise ValueError()
+    json_payload = {"sendresp": True,
+                    "commandKey": "",
+                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
+                    "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
+    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
+    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
+    if not response.ok:
+        logging.error("Could not send VBSS creation request")
 
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
     if not conn_ctx:
@@ -753,9 +789,9 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
     if not n_clicks:
         return ""
     logging.debug(f"Request to monitor controller at {ip}:{port}")
-    if not validate_ipv4(ip):
+    if not validation.validate_ipv4(ip):
         return f"IP address '{ip}' seems malformed. Try again."
-    if not validate_port(port):
+    if not validation.validate_port(port):
         return f"Port '{port}' seems malformed. Try again."
     global nbapi_thread
     if nbapi_thread:
@@ -781,6 +817,14 @@ def on_transition_type_choice_click(_type):
 def update_prplmesh_ssid(unused):
     return g_Topology.get_ssid()
 
+@app.callback(Output('vbss-creation-client-mac', 'options'),
+              Input('vbss-creation-interval', 'n_intervals')
+)
+def update_stations(_):
+    """Populates the available station list for the client MAC field of a VBSS creation request.
+    """
+    return [sta.get_mac() for sta in g_Topology.get_stations()]
+
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
               Output('transition_bssid', 'placeholder'),
@@ -795,6 +839,17 @@ def update_transition_dropdown_menus(unused, _type):
         avail_targets = [radio.get_ruid() for radio in g_Topology.get_radios()]
         placeholder = 'Select a new RUID'
     return (avail_stations, avail_targets, placeholder)
+
+@app.callback(Output('vbss-creation-ruid', 'options'),
+              Input('vbss-creation-interval', 'n_intervals')
+)
+def update_vbss_creation_ruid_dropdown(_):
+    """Populates the RUID dropdown field for creating a VBSS.
+    """
+    available_radio_uids = [radio.get_ruid() for radio in g_Topology.get_radios()]
+    if len(available_radio_uids):
+        return available_radio_uids
+    return []
 
 @app.callback(
     Output('transition-output', 'children'),
@@ -834,6 +889,70 @@ def node_click(clickData):
     if sta:
         return json.dumps(sta.params, indent=2)
     return "None found!"
+
+@app.callback(Output('vbss-creation-output', 'children'),
+              Input('vbss-creation-submit', 'n_clicks'),
+              State('vbss-ssid', 'value'),
+              State('vbss-pw', 'value'),
+              State('vbss-creation-client-mac', 'value'),
+              State('vbss-creation-vbssid', 'value'),
+              State('vbss-creation-ruid', 'value')
+)
+def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str, vbssid: str, ruid: str):
+    """Callback for VBSS Creation Button click
+
+    Args:
+        n_clicks (int): How many clicks? Binary, 1 or 0. If 0, just bail.
+        ssid (str): SSID of the VBSS to create.
+        password (str): Password for the VBSS.
+        client_mac (str): The Client (STA) that this VBSS is meant for.
+        vbssid (str): The VBSSID to use for the newly created VBSS.
+
+    Returns:
+        str: Error string if inputs are invalid, success of sending the creation request otherwise.
+    """
+    if not n_clicks:
+        return ""
+    if ssid is None:
+        return "Enter an SSID"
+    if password is None:
+        return "Enter a password"
+    if vbssid is None:
+        return "Enter a VBSSID"
+    if client_mac is None:
+        return "Select a station"
+    if ruid is None:
+        return "Select a Radio to create the VBSS on."
+    is_password_valid, password_error = validation.validate_vbss_password_for_creation(password)
+    if not is_password_valid:
+        return f"Invalid password: {password_error}"
+    is_client_mac_valid, client_mac_error = validation.validate_vbss_client_mac(client_mac, g_Topology)
+    if not is_client_mac_valid:
+        return f"Client MAC invalid: {client_mac_error}"
+    is_vbssid_valid, vbssid_error = validation.validate_vbss_vbssid(vbssid, g_Topology)
+    if not is_vbssid_valid:
+        return f"VBSSID invalid: {vbssid_error}"
+    radio = g_Topology.get_radio_by_ruid(ruid)
+    if radio is None:
+        return "Radio is unknown"
+    # Valid radio -- parse it's DM path to extract the Device index and Radio index needed to make the NBAPI call.
+    device_nbapi_id = ""
+    radio_nbapi_id = ""
+    radio_path_tokens = radio.path.split('.')
+    for token_idx, token in enumerate(radio_path_tokens):
+        if token == "Device":
+            # Path entries all begin with "Device" i.e. "Device.WiFi.DataElements.Blah", so ignore the first instance
+            if token_idx == 0:
+                continue
+            if token_idx < len(radio_path_tokens):
+                device_nbapi_id = radio_path_tokens[token_idx + 1]
+        elif token == "Radio":
+            if token_idx < len(radio_path_tokens):
+                radio_nbapi_id = radio_path_tokens[token_idx + 1]
+    if not device_nbapi_id or not radio_nbapi_id:
+        return "Could not send VBSS creation request. Could not find Radio on the network."
+    send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, int(device_nbapi_id), int(radio_nbapi_id))
+    return "Sent a VBSS creation request."
 
 if __name__ == '__main__':
     # Silence imported module logs
