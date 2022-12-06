@@ -352,7 +352,7 @@ def network_graph(topology: Topology):
     fig.update_traces(textposition='middle right', textfont_size=14) # , marker_symbol="diamond")
 
     # Add legend image
-    legendImage = Image.open("legend_small.png")
+    legendImage = Image.open("res/legend_small.png")
     fig.add_layout_image(
         dict(
         source=legendImage,
