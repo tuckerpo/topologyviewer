@@ -764,7 +764,7 @@ def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, d
     if not response.ok:
         logging.error("Could not send VBSS move request")
 
-def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, device_idx: int, radio_idx: int):
+def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, radio: Radio):
     """Sends a VBSS creation request to an NBAPI Radio endpoint.
 
     Args:
@@ -781,6 +781,8 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
     """
     if not conn_ctx:
         raise ValueError()
+    device_idx = parse_index_from_path_by_key(radio.path, 'Device')
+    radio_idx  = parse_index_from_path_by_key(radio.path, 'Radio')
     json_payload = {"sendresp": True,
                     "commandKey": "",
                     "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
@@ -965,23 +967,7 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
     radio = g_Topology.get_radio_by_ruid(ruid)
     if radio is None:
         return "Radio is unknown"
-    # Valid radio -- parse it's DM path to extract the Device index and Radio index needed to make the NBAPI call.
-    device_nbapi_id = ""
-    radio_nbapi_id = ""
-    radio_path_tokens = radio.path.split('.')
-    for token_idx, token in enumerate(radio_path_tokens):
-        if token == "Device":
-            # Path entries all begin with "Device" i.e. "Device.WiFi.DataElements.Blah", so ignore the first instance
-            if token_idx == 0:
-                continue
-            if token_idx < len(radio_path_tokens):
-                device_nbapi_id = radio_path_tokens[token_idx + 1]
-        elif token == "Radio":
-            if token_idx < len(radio_path_tokens):
-                radio_nbapi_id = radio_path_tokens[token_idx + 1]
-    if not device_nbapi_id or not radio_nbapi_id:
-        return "Could not send VBSS creation request. Could not find Radio on the network."
-    send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, int(device_nbapi_id), int(radio_nbapi_id))
+    send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, radio)
     return "Sent a VBSS creation request."
 
 if __name__ == '__main__':
