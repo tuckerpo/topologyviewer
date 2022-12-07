@@ -766,10 +766,7 @@ def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, d
         "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSMove",
         "inputArgs": {"client_mac": client_mac, "dest_ruid": dest_ruid, "ssid": ssid, "pass": password}
     }
-    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
-    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
-    if not response.ok:
-        logging.error("Could not send VBSS move request")
+    send_nbapi_command(conn_ctx, json_payload)
 
 def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, radio: Radio):
     """Sends a VBSS creation request to an NBAPI Radio endpoint.
@@ -794,10 +791,7 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
                     "commandKey": "",
                     "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
                     "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
-    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
-    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
-    if not response.ok:
-        logging.error("Could not send VBSS creation request")
+    send_nbapi_command(conn_ctx, json_payload)
 
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
     if not conn_ctx:
@@ -808,12 +802,7 @@ def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str
                     "command": "Device.WiFi.DataElements.Network.ClientSteering",
                     "inputArgs": {"station_mac": sta_mac,
                                   "target_bssid": new_bssid}}
-    url = "http://{}:{}/commands".format(conn_ctx.ip, conn_ctx.port)
-    nbapi_root_request_response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
-    # TODO: proper error handling
-    logging.info(f"Sent client steering request, cmd={str(json_payload)}")
-    if not nbapi_root_request_response.ok:
-        logging.error(f"Something went wrong when sending the steering request\n: {str(nbapi_root_request_response)}")
+    send_nbapi_command(conn_ctx, json_payload)
 
 # Component callbacks
 @app.callback(
