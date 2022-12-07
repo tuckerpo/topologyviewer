@@ -4,6 +4,7 @@ from main import marshall_nbapi_blob
 import validation
 from topology import Topology
 from easymesh import Agent, Station
+from path_parser import parse_index_from_path_by_key
 class TopologyParsingTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(TopologyParsingTests, self).__init__(*args, **kwargs)
@@ -76,6 +77,26 @@ class VBSSValidationTests(unittest.TestCase):
         error, err_string = validation.validate_vbss_password_for_creation("badpw")
         self.assertFalse(error)
         self.assertTrue(len(err_string) > 0)
+
+class PathParserTests(unittest.TestCase):
+    """Unit tests for path_parser module
+    """
+    def __init__(self, *args, **kwargs):
+        super(PathParserTests, self).__init__(*args, **kwargs)
+    def test_index_lookup(self):
+        """Test that we can parse node indeces from NBAPI paths
+        """
+        path_prefix = "Device.WiFi.DataElements.Network."
+        device_suffix = "Device.5."
+        self.assertEqual(parse_index_from_path_by_key(path_prefix+device_suffix, "Device"), "5")
+    def test_index_lookup_empty_path(self):
+        """Test that we can handle bad input
+        """
+        self.assertEqual(parse_index_from_path_by_key("", "Radio"), "")
+    def test_index_lookup_empty_keyword(self):
+        """Test that we can handle bad input
+        """
+        self.assertEqual(parse_index_from_path_by_key("Device.WiFi.", ""), "")
 
 if __name__ == '__main__':
     unittest.main()
