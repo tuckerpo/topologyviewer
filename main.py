@@ -736,6 +736,13 @@ class NBAPI_Task(threading.Thread):
 
 nbapi_thread = None
 
+def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json):
+    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
+    logging.debug(f"Sending NBAPI command to {url}, payload={command_payload}")
+    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=command_payload)
+    if not response.ok:
+        logging.error(f"Failed to send NBAPI command to f{url}: command payload: {command_payload}, HTTP code: {response.status_code}")
+
 def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, dest_ruid: str, ssid: str, password: str, bss: BSS):
     """Sends a VBSS move request over the network.
     ubus call Device.WiFi.DataElements.Network.Device.1.Radio.2.BSS.2 TriggerVBSSMove "{'client_mac':'c2:f5:2b:3d:d9:7e', 'dest_ruid':'96:83:c4:16:83:b2','ssid':'iNetVBSS2', 'pass':'password'}"
