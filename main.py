@@ -7,17 +7,19 @@ from pprint import pformat, pprint
 from textwrap import dedent as d
 from time import sleep
 from typing import List
-from PIL import Image
 
 import networkx as nx
-from networkx.drawing.nx_pydot import graphviz_layout
 import plotly.graph_objs as go
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+from networkx.drawing.nx_pydot import graphviz_layout
+from PIL import Image
 
-from easymesh import BSS, Agent, Radio, Station, Interface, Neighbor, ORIENTATION
-from topology import Topology
 import validation
+from easymesh import (BSS, ORIENTATION, Agent, Interface, Neighbor, Radio,
+                      Station)
+from path_parser import parse_index_from_path_by_key
+from topology import Topology
 
 app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
@@ -733,6 +735,34 @@ class NBAPI_Task(threading.Thread):
         self.quitting = True
 
 nbapi_thread = None
+
+def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, dest_ruid: str, ssid: str, password: str, bss: BSS):
+    """Sends a VBSS move request over the network.
+    ubus call Device.WiFi.DataElements.Network.Device.1.Radio.2.BSS.2 TriggerVBSSMove "{'client_mac':'c2:f5:2b:3d:d9:7e', 'dest_ruid':'96:83:c4:16:83:b2','ssid':'iNetVBSS2', 'pass':'password'}"
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection to the topology's controller.
+        client_mac (str): The client we're moving the VBSS for.
+        dest_ruid (str): The destination radio for the VBSS move.
+        ssid (str): The name of the VBSS on the destination radio.
+        password (str): The password for the VBSS on the destination radio.
+        bss (BSS): The NBAPI BSS node we're calling this method on.
+    """
+    if not conn_ctx:
+        raise ValueError()
+    device_idx, radio_idx, bss_idx = "", "", ""
+    device_idx = parse_index_from_path_by_key(bss.path, 'Device')
+    radio_idx = parse_index_from_path_by_key(bss.path, 'Radio')
+    bss_idx = parse_index_from_path_by_key(bss.path, 'BSS')
+    json_payload = {
+        "sendresp": True,
+        "commandKey": "",
+        "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSMove",
+        "inputArgs": {"client_mac": client_mac, "dest_ruid": dest_ruid, "ssid": ssid, "pass": password}
+    }
+    url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
+    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=json_payload)
+    if not response.ok:
+        logging.error("Could not send VBSS move request")
 
 def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, device_idx: int, radio_idx: int):
     """Sends a VBSS creation request to an NBAPI Radio endpoint.
