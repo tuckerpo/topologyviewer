@@ -215,3 +215,14 @@ class Topology():
             if radio.get_ruid() == ruid:
                 return radio
         return None
+
+    def get_bss_by_bssid(self, bssid: str):
+        """Get a BSS object via it's BSSID
+
+        Returns: BSS object with bssid 'bssid', or None if not found
+        """
+        for radio in self.get_radios():
+            for bss in radio.get_bsses():
+                if bss.get_bssid() == bssid:
+                    return bss
+        return None
