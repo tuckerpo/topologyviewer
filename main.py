@@ -450,8 +450,6 @@ app.layout = html.Div([
                             dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True),
                             dcc.Markdown(d("""
                             **Create VBSS**
-
-                            Create a Virtual BSS.
                             """)),
                             dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
                             dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
@@ -463,6 +461,16 @@ app.layout = html.Div([
                             html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
                             html.Br(),
                             html.Br(),
+                            dcc.Markdown(d("""
+                            **Move VBSS**
+                            """)),
+                            dcc.Input(id='vbss-move-ssid', type='text', placeholder='Destination SSID'),
+                            dcc.Input(id='vbss-move-password', type='text', placeholder='Destination password'),
+                            dcc.Dropdown(options=[], id='vbss-move-client-mac', placeholder='Select a station'),
+                            dcc.Dropdown(options=[], id='vbss-move-dest-ruid', placeholder='Select a destination RUID'),
+                            dcc.Interval(id='vbss-move-interval', interval=100, n_intervals=0),
+                            html.Button('Move', id='vbss-move-btn', n_clicks=0),
+                            html.Div(id='vbss-move-output', children='Click move'),
                         ],
                         style={'height': '300px'}
                     ),
@@ -868,6 +876,22 @@ def update_transition_dropdown_menus(unused, _type):
         placeholder = 'Select a new RUID'
     return (avail_stations, avail_targets, placeholder)
 
+@app.callback(Output('vbss-move-client-mac', 'options'),
+              Input('vbss-move-interval', 'n_intervals')
+)
+def update_vbss_move_client_mac(_):
+    """Populate the client MAC dropdown for VBSS moves.
+    """
+    return [sta.get_mac() for sta in g_Topology.get_stations()]
+
+@app.callback(Output('vbss-move-dest-ruid', 'options'),
+              Input('vbss-move-interval', 'n_intervals')
+)
+def update_vbss_move_ruid_dropdown(_):
+    """Populate the destination RUID dropdown for VBSS moves.
+    """
+    return [radio.get_ruid() for radio in g_Topology.get_radios()]
+
 @app.callback(Output('vbss-creation-ruid', 'options'),
               Input('vbss-creation-interval', 'n_intervals')
 )
@@ -917,6 +941,34 @@ def node_click(clickData):
     if sta:
         return json.dumps(sta.params, indent=2)
     return "None found!"
+
+@app.callback(Output('vbss-move-output', 'children'),
+              Input('vbss-move-btn', 'n_clicks'),
+              State('vbss-move-ssid', 'value'),
+              State('vbss-move-password', 'value'),
+              State('vbss-move-dest-ruid', 'value'),
+              State('vbss-move-client-mac', 'value')
+)
+def vbss_move_callback(n_clicks: int, ssid: str, password: str, dest_ruid: str, client_mac: str):
+    """Handle a VBSS move click
+    """
+    if not n_clicks:
+        return ""
+    if not ssid:
+        return "Enter an SSID"
+    if not password:
+        return "Enter a password"
+    if not dest_ruid:
+        return "Select a destination RUID"
+    if not client_mac:
+        return "Select a client MAC"
+    password_ok, password_error = validation.validate_vbss_password_for_creation(password)
+    if not password_ok:
+        return password_error
+    bssid = g_Topology.get_bssid_connection_for_sta(client_mac)
+    bss = g_Topology.get_bss_by_bssid(bssid)
+    send_vbss_move_request(g_ControllerConnectionCtx, client_mac, dest_ruid, ssid, password, bss)
+    return "Sent VBSS move request"
 
 @app.callback(Output('vbss-creation-output', 'children'),
               Input('vbss-creation-submit', 'n_clicks'),
