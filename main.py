@@ -12,6 +12,7 @@ import networkx as nx
 import plotly.graph_objs as go
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+import dash_daq as daq
 from networkx.drawing.nx_pydot import graphviz_layout
 from PIL import Image
 
@@ -471,6 +472,13 @@ app.layout = html.Div([
                             dcc.Interval(id='vbss-move-interval', interval=100, n_intervals=0),
                             html.Button('Move', id='vbss-move-btn', n_clicks=0),
                             html.Div(id='vbss-move-output', children='Click move'),
+                            dcc.Markdown(d("""
+                            **Destroy VBSS**
+                            """)),
+                            daq.BooleanSwitch(id='vbss-destruction-disassociate', label='Disassociate Clients?', on=True),
+                            dcc.Dropdown(options=[], id='vbss-destruction-bssid', placeholder='Select a VBSSID to destroy.'),
+                            html.Button('Destroy', id='vbss-destruction-submit', n_clicks=0),
+                            html.Div(id='vbss-destruction-output', children='Click destroy'),
                         ],
                         style={'height': '300px'}
                     ),
