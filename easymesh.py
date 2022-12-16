@@ -78,6 +78,15 @@ class BSS():
         if 'BSSID' in self.params:
             return self.params['BSSID']
         return ''
+    def is_vbss(self) -> bool:
+        """Is this BSS a Virtual BSS?
+
+        Returns:
+            bool: True if this is a VBSS, false otherwise.
+        """
+        if 'IsVBSS' in self.params:
+            return self.params['IsVBSS']
+        return False
 
 class Radio():
     def __init__(self, path, params) -> None:

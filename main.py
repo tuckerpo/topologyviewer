@@ -12,6 +12,7 @@ import networkx as nx
 import plotly.graph_objs as go
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+import dash_daq as daq
 from networkx.drawing.nx_pydot import graphviz_layout
 from PIL import Image
 
@@ -471,6 +472,13 @@ app.layout = html.Div([
                             dcc.Interval(id='vbss-move-interval', interval=100, n_intervals=0),
                             html.Button('Move', id='vbss-move-btn', n_clicks=0),
                             html.Div(id='vbss-move-output', children='Click move'),
+                            dcc.Markdown(d("""
+                            **Destroy VBSS**
+                            """)),
+                            daq.BooleanSwitch(id='vbss-destruction-disassociate', label='Disassociate Clients?', on=True),
+                            dcc.Dropdown(options=[], id='vbss-destruction-bssid', placeholder='Select a VBSSID to destroy.'),
+                            html.Button('Destroy', id='vbss-destruction-submit', n_clicks=0),
+                            html.Div(id='vbss-destruction-output', children='Click destroy'),
                         ],
                         style={'height': '300px'}
                     ),
@@ -801,6 +809,27 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
                     "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
     send_nbapi_command(conn_ctx, json_payload)
 
+def send_vbss_destruction_request(conn_ctx: ControllerConnectionCtx, client_mac: str, should_disassociate: bool, bss: BSS):
+    """Sends a VBSS destruction request to an NBAPI BSS endpoint.
+
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection to the topology's controller
+        client_mac (str): The client MAC to disassociate (currently unused on the server -- all clients are disassociated if 'should_disassociate' is set.)
+        should_disassociate (bool): If true, disassociate all clients prior to tearing down the BSS.
+        bss (BSS): The BSS we're tearing down.
+    """
+    if not conn_ctx:
+        raise ValueError()
+    device_idx = parse_index_from_path_by_key(bss.path, 'Device')
+    radio_idx = parse_index_from_path_by_key(bss.path, 'Radio')
+    bss_idx = parse_index_from_path_by_key(bss.path, 'BSS')
+    json_payload = {"sendresp": True,
+                    "commandKey": "",
+                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSDestruction",
+                    "inputArgs": {"client_mac": client_mac, "should_disassociate": should_disassociate}}
+    send_nbapi_command(conn_ctx, json_payload)
+
+
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
@@ -883,6 +912,19 @@ def update_vbss_move_client_mac(_):
     """Populate the client MAC dropdown for VBSS moves.
     """
     return [sta.get_mac() for sta in g_Topology.get_stations()]
+
+@app.callback(Output('vbss-destruction-bssid', 'options'),
+              Input('vbss-move-interval', 'n_intervals')
+)
+def update_vbss_destruction_bssid_dropdown(_):
+    """Populates the VBSSID dropdown selection for the Destroy component.
+    """
+
+    # TODO: the below commented-out code should be the only code in this function.
+    # Currently, prplMesh does not populate the 'IsVBSS' field correctly for virtual BSSes.
+    # return [bss.get_bssid() for bss in g_Topology.get_bsses() if bss.is_vbss()]
+
+    return [bss.get_bssid() for bss in g_Topology.get_bsses()]
 
 @app.callback(Output('vbss-move-dest-ruid', 'options'),
               Input('vbss-move-interval', 'n_intervals')
@@ -1017,6 +1059,31 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
         return "Radio is unknown"
     send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, radio)
     return "Sent a VBSS creation request."
+
+
+@app.callback(Output('vbss-destruction-output', 'children'),
+              Input('vbss-destruction-submit', 'n_clicks'),
+              State('vbss-destruction-disassociate', 'on'),
+              State('vbss-destruction-bssid', 'value')
+)
+def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str):
+    """Callback for VBSS destruction click
+
+    Args:
+        n_clicks (int): How many clicks? Binary, 1 or 0. If 0, just bail.
+        should_disassociate (bool): If set, disassociate all clients prior to tearing down the BSS.
+        bssid (str): The BSSID of the BSS to destroy.
+        
+    Note: Canonically, the NBAPI method also takes a 'client_mac', but it is unused, so not parameterized in the UI.
+    """
+    if not n_clicks:
+        return ""
+    bss = g_Topology.get_bss_by_bssid(bssid)
+    if not bss:
+        return f"Could not find a BSS for BSSID '{bssid}'"
+    dummy_client_mac_addr = "aa:bb:cc:dd:ee:ff"
+    send_vbss_destruction_request(g_ControllerConnectionCtx, dummy_client_mac_addr, should_disassociate, bss)
+    return f"Sent VBSS destruction request for '{bssid}'"
 
 if __name__ == '__main__':
     # Silence imported module logs
