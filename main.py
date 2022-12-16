@@ -913,6 +913,19 @@ def update_vbss_move_client_mac(_):
     """
     return [sta.get_mac() for sta in g_Topology.get_stations()]
 
+@app.callback(Output('vbss-destruction-bssid', 'options'),
+              Input('vbss-move-interval', 'n_intervals')
+)
+def update_vbss_destruction_bssid_dropdown(_):
+    """Populates the VBSSID dropdown selection for the Destroy component.
+    """
+
+    # TODO: the below commented-out code should be the only code in this function.
+    # Currently, prplMesh does not populate the 'IsVBSS' field correctly for virtual BSSes.
+    # return [bss.get_bssid() for bss in g_Topology.get_bsses() if bss.is_vbss()]
+
+    return [bss.get_bssid() for bss in g_Topology.get_bsses()]
+
 @app.callback(Output('vbss-move-dest-ruid', 'options'),
               Input('vbss-move-interval', 'n_intervals')
 )
@@ -1046,6 +1059,31 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
         return "Radio is unknown"
     send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, radio)
     return "Sent a VBSS creation request."
+
+
+@app.callback(Output('vbss-destruction-output', 'children'),
+              Input('vbss-destruction-submit', 'n_clicks'),
+              State('vbss-destruction-disassociate', 'on'),
+              State('vbss-destruction-bssid', 'value')
+)
+def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str):
+    """Callback for VBSS destruction click
+
+    Args:
+        n_clicks (int): How many clicks? Binary, 1 or 0. If 0, just bail.
+        should_disassociate (bool): If set, disassociate all clients prior to tearing down the BSS.
+        bssid (str): The BSSID of the BSS to destroy.
+        
+    Note: Canonically, the NBAPI method also takes a 'client_mac', but it is unused, so not parameterized in the UI.
+    """
+    if not n_clicks:
+        return ""
+    bss = g_Topology.get_bss_by_bssid(bssid)
+    if not bss:
+        return f"Could not find a BSS for BSSID '{bssid}'"
+    dummy_client_mac_addr = "aa:bb:cc:dd:ee:ff"
+    send_vbss_destruction_request(g_ControllerConnectionCtx, dummy_client_mac_addr, should_disassociate, bss)
+    return f"Sent VBSS destruction request for '{bssid}'"
 
 if __name__ == '__main__':
     # Silence imported module logs
