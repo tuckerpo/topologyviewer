@@ -809,6 +809,27 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
                     "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
     send_nbapi_command(conn_ctx, json_payload)
 
+def send_vbss_destruction_request(conn_ctx: ControllerConnectionCtx, client_mac: str, should_disassociate: bool, bss: BSS):
+    """Sends a VBSS destruction request to an NBAPI BSS endpoint.
+
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection to the topology's controller
+        client_mac (str): The client MAC to disassociate (currently unused on the server -- all clients are disassociated if 'should_disassociate' is set.)
+        should_disassociate (bool): If true, disassociate all clients prior to tearing down the BSS.
+        bss (BSS): The BSS we're tearing down.
+    """
+    if not conn_ctx:
+        raise ValueError()
+    device_idx = parse_index_from_path_by_key(bss.path, 'Device')
+    radio_idx = parse_index_from_path_by_key(bss.path, 'Radio')
+    bss_idx = parse_index_from_path_by_key(bss.path, 'BSS')
+    json_payload = {"sendresp": True,
+                    "commandKey": "",
+                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSDestruction",
+                    "inputArgs": {"client_mac": client_mac, "should_disassociate": should_disassociate}}
+    send_nbapi_command(conn_ctx, json_payload)
+
+
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
