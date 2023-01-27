@@ -1,6 +1,7 @@
 """
 Module that represents a HTTP connection to a topology's Controller.
 """
+from http_auth import HTTPBasicAuthParams
 
 class ControllerConnectionCtx():
     """Class to hold the connect to a EasyMesh topology's Controller.
