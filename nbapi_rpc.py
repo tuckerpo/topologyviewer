@@ -7,7 +7,7 @@ import json
 import requests
 from path_parser import parse_index_from_path_by_key
 from easymesh import BSS, Radio
-
+from controller_ctx import ControllerConnectionCtx
 
 def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json):
     url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
