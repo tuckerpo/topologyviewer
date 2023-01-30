@@ -492,10 +492,24 @@ app.layout = html.Div([
             ),
             html.Div(
                 className="eight columns",
-                children=[dcc.Graph(id="my-graph",
-                                    figure=network_graph(g_Topology), animate=True, config={'displayModeBar': True}),
-                          dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
-                style={'height': '1000px'}
+                children=[
+                    html.Div(
+                        className="twelve columns",
+                        children=[dcc.Graph(id="my-graph",
+                                            figure=network_graph(g_Topology), animate=True, config={'displayModeBar': True}),
+                                dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
+                        style={'height': '800px'}
+                    ),
+                    html.Div(
+                        className="twelve columns",
+                        children=[dcc.Graph(id="rssi-plot",
+                                figure=dict(
+                                    layout=dict(
+                                    )
+                                ), config={'displayModeBar': True}),
+                                dcc.Interval(id='rssi-plot-interval', interval=500, n_intervals=0)],
+                    ),
+                ]
             ),
             html.Div(
                 className="two columns",
@@ -991,6 +1005,19 @@ def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str)
     dummy_client_mac_addr = "aa:bb:cc:dd:ee:ff"
     send_vbss_destruction_request(g_ControllerConnectionCtx, dummy_client_mac_addr, should_disassociate, bss)
     return f"Sent VBSS destruction request for '{bssid}'"
+
+@app.callback(
+    Output('rssi-plot', 'figure'),
+    Input('rssi-plot-interval', 'n_intervals')
+)
+def update_rssi_plot(_):
+    """Adds data points for the currently selected station in the 'rssi-plot' div.
+
+    Args:
+        _ (n_intervals): Unused
+    """
+    logging.debug("update_rssi_plot -- NOT IMPLEMENTED!")
+    return dict()
 
 if __name__ == '__main__':
     # Silence imported module logs
