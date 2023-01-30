@@ -18,7 +18,7 @@ from PIL import Image
 
 import validation
 from easymesh import (BSS, ORIENTATION, Agent, Interface, Neighbor, Radio,
-                      Station)
+                      Station, UnassociatedStation)
 from path_parser import parse_index_from_path_by_key
 from topology import Topology
 from nbapi_rpc import *
@@ -690,6 +690,20 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             for station in station_list:
                 if station.params["MACAddress"] == e["parameters"]["DeviceId"] and e["parameters"]["Result"] == "Success":
                     station.set_steered(True)
+
+    for e in nbapi_json:
+        if re.search(r"\.UnassociatedSTA\.\d{1,10}\.$", e['path']):
+            for agent in agent_list:
+                for radio in agent.get_radios():
+                    if e['path'].startswith(radio.path):
+                        unassoc_sta = UnassociatedStation(e['path'], e['parameters'])
+                        unassoc_sta.set_parent_radio(radio)
+                        if radio.get_unassociated_station_by_mac(unassoc_sta.get_mac()):
+                            # This is NOT the first time this radio has seen this unassociated station.
+                            # So, update it's params instead of adding a new object.
+                            radio.update_unassociated_station(unassoc_sta, e['parameters'])
+                        else:
+                            radio.add_unassociated_station(unassoc_sta)
 
     # DEBUG
     # for i, agent in enumerate(agent_list):
