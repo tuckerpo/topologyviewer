@@ -58,6 +58,22 @@ class Station():
         return self.is_steered
     def set_steered(self, steered: bool) -> None:
         self.is_steered = steered
+    def get_rssi(self) -> int:
+        """
+        Get this station's last signal strength measurement.
+        Note: this returns the signal strength of this station relative to the Agent that it is connected to.
+        Returns:
+            int: The signal strength. -127 if the field is not present.
+        """
+        if 'RSSI' in self.params:
+            return self.params['RSSI']
+        elif 'SignalStrength' in self.params:
+            return self.params['SignalStrength']
+        elif 'RCPI' in self.params:
+            return self.params['RCPI']
+        else:
+            # Return -INT8_MAX, assuming dBm
+            return -127
 
 class BSS():
     def __init__(self, path, params) -> None:
