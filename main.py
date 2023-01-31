@@ -771,6 +771,26 @@ class NBAPI_Task(threading.Thread):
 
 nbapi_thread = None
 
+'''
+For keeping track of the last clicked station, for the RSSI plotting.
+'''
+LAST_CLICKED_STATION: Station = None
+def get_last_clicked_station() -> Station:
+    """Gets the last station node clicked in the topology graph.
+
+    Returns:
+        Station: The last clicked station.
+    """
+    return LAST_CLICKED_STATION
+def set_last_clicked_station(last_clicked_sta: Station) -> None:
+    """Sets the last station node clicked in the topology graph.
+
+    Args:
+        last_clicked_sta (Station): The last clicked station.
+    """
+    global LAST_CLICKED_STATION
+    LAST_CLICKED_STATION = last_clicked_sta
+
 # Component callbacks
 @app.callback(
     Output('output', 'children'),
@@ -912,6 +932,8 @@ def node_click(clickData):
 
     sta = g_Topology.get_station_from_hash(node_hash)
     if sta:
+        logging.debug("Station clicked!")
+        set_last_clicked_station(sta)
         return json.dumps(sta.params, indent=2)
 
     interface = g_Topology.get_interface_from_hash(node_hash)
