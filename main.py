@@ -116,6 +116,7 @@ def get_iface_markers(agent: Agent):
         x0 = x0 + x_distance
 
     for i in agent.get_interfaces():
+        marker_references.append(i.get_hash_id())
         node_x.append(i.x)
         node_y.append(i.y)
         node_labels.append("")
@@ -256,6 +257,7 @@ def network_graph(topology: Topology):
             color=node_colors,
             size=node_sizes,
             line_width=2))
+    marker_references.clear()
 
     edge_x = []
     edge_y = []
@@ -303,6 +305,7 @@ def network_graph(topology: Topology):
         hovertext=node_hover_text,
         mode='markers+text',
         marker_symbol=node_symbols,
+        customdata=marker_references,
         hoverinfo='text',
         marker=dict(
             colorscale='Electric',
