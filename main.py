@@ -116,6 +116,7 @@ def get_iface_markers(agent: Agent):
         x0 = x0 + x_distance
 
     for i in agent.get_interfaces():
+        marker_references.append(i.get_hash_id())
         node_x.append(i.x)
         node_y.append(i.y)
         node_labels.append("")
@@ -256,6 +257,7 @@ def network_graph(topology: Topology):
             color=node_colors,
             size=node_sizes,
             line_width=2))
+    marker_references.clear()
 
     edge_x = []
     edge_y = []
@@ -303,6 +305,7 @@ def network_graph(topology: Topology):
         hovertext=node_hover_text,
         mode='markers+text',
         marker_symbol=node_symbols,
+        customdata=marker_references,
         hoverinfo='text',
         marker=dict(
             colorscale='Electric',
@@ -874,13 +877,21 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
 def node_click(clickData):
     if not clickData:
         return ""
-    agent = g_Topology.get_agent_from_hash(clickData['points'][0]['customdata'])
+    clicked_point = clickData['points'][0]
+    if 'customdata' not in clicked_point:
+        return "Node data not available"
+    node_hash = clicked_point['customdata']
+    agent = g_Topology.get_agent_from_hash(node_hash)
     if agent:
         return json.dumps(agent.params, indent=2)
 
-    sta = g_Topology.get_station_from_hash(clickData['points'][0]['customdata'])
+    sta = g_Topology.get_station_from_hash(node_hash)
     if sta:
         return json.dumps(sta.params, indent=2)
+
+    interface = g_Topology.get_interface_from_hash(node_hash)
+    if interface:
+        return json.dumps(interface.params, indent=2)
     return "None found!"
 
 @app.callback(Output('vbss-move-output', 'children'),

@@ -174,6 +174,9 @@ class Interface():
         return self.parentAgent
     def get_interface_number(self):
         return self.path[-2::][0]
+    def get_hash_id(self) -> str:
+        return hashlib.md5(self.path.encode()).hexdigest()
+
 
 class Agent():
     def __init__(self, path, params) -> None:

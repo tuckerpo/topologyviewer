@@ -4,6 +4,7 @@ from easymesh import Agent
 from easymesh import Radio
 from easymesh import BSS
 from easymesh import Station
+from easymesh import Interface
 
 class Topology():
     def __init__(self, agents: List[Agent], controllerID: str) -> None:
@@ -26,6 +27,22 @@ class Topology():
             List[Agent]: All known agents on the network, inclusive of the controller.
         """
         return self.agents
+    def get_interface_from_hash(self, hash_id: str) -> Interface:
+        """Gets an interface with the given hash id
+
+        Args:
+            hash_id (str): The hash ID of the node.
+
+        Returns:
+            Interface: The interface object with hash_id if found, None otherwise
+        """
+        for agent in self.agents:
+            for interface in agent.get_interfaces():
+                if interface.get_hash_id() == hash_id:
+                    return interface
+        return None
+
+
     def get_agent_from_hash(self, hash: str) -> Agent:
         """Gets an agent with given hashed ID
 
