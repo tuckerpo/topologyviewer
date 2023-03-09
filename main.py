@@ -877,13 +877,21 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
 def node_click(clickData):
     if not clickData:
         return ""
-    agent = g_Topology.get_agent_from_hash(clickData['points'][0]['customdata'])
+    clicked_point = clickData['points'][0]
+    if 'customdata' not in clicked_point:
+        return "Node data not available"
+    node_hash = clicked_point['customdata']
+    agent = g_Topology.get_agent_from_hash(node_hash)
     if agent:
         return json.dumps(agent.params, indent=2)
 
-    sta = g_Topology.get_station_from_hash(clickData['points'][0]['customdata'])
+    sta = g_Topology.get_station_from_hash(node_hash)
     if sta:
         return json.dumps(sta.params, indent=2)
+
+    interface = g_Topology.get_interface_from_hash(node_hash)
+    if interface:
+        return json.dumps(interface.params, indent=2)
     return "None found!"
 
 @app.callback(Output('vbss-move-output', 'children'),
