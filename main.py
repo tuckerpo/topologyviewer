@@ -842,10 +842,7 @@ def update_vbss_move_ruid_dropdown(_):
 def update_vbss_creation_ruid_dropdown(_):
     """Populates the RUID dropdown field for creating a VBSS.
     """
-    available_radio_uids = [radio.get_ruid() for radio in g_Topology.get_radios()]
-    if len(available_radio_uids):
-        return available_radio_uids
-    return []
+    return [radio.get_ruid() for radio in g_Topology.get_radios()]
 
 @app.callback(
     Output('transition-output', 'children'),
