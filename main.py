@@ -808,6 +808,7 @@ class NBAPI_Task(threading.Thread):
         self.port = connection_ctx.port
         self.cadence_ms = cadence_ms
         self.quitting = False
+        self.heartbeat_count = 0
         if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
@@ -820,10 +821,12 @@ class NBAPI_Task(threading.Thread):
             # DEBUG: Load previously dumped JSON response
             # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
             #     nbapi_root_json_blob = json.loads(f.read())
-
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=3)
+            logging.debug(f"Ping -> {self.ip}:{self.port} #{self.heartbeat_count}")
+            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=10)
             if not nbapi_root_request_response.ok:
                 break
+            logging.debug(f"Pong <- {self.ip}:{self.port} #{self.heartbeat_count}")
+            self.heartbeat_count = self.heartbeat_count + 1
             nbapi_root_json_blob = nbapi_root_request_response.json()
 
             global g_Topology
