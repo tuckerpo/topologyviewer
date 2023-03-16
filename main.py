@@ -280,8 +280,12 @@ def network_graph(topology: Topology):
             node_sizes.append(35)
             node_symbols.append('circle-open')
             node_colors.append('red')
-            if topology.get_station_from_hash(node).get_steered():
+            sta = topology.get_station_from_hash(node)
+            if sta.get_steered():
                 node_labels.append(f'  Client STA: {topology.get_station_from_hash(node).params["MACAddress"][-2::]}<br>  steered by prplMesh Controller<br>  via prplMesh Northbound API')# + topology.get_station_from_hash(node).params["mac"])
+            elif 'Hostname' in sta.params and sta.params['Hostname'] and sta.params['Hostname'] != '0':
+                hostname = sta.params['Hostname'] + '-' + sta.params['MACAddress'][-2::]
+                node_labels.append(f'Client STA: {hostname}')
             else:
                 node_labels.append(f'  Client STA: {topology.get_station_from_hash(node).params["MACAddress"][-2::]}')
 
