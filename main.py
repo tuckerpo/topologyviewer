@@ -809,6 +809,8 @@ class NBAPI_Task(threading.Thread):
         self.cadence_ms = cadence_ms
         self.quitting = False
         self.heartbeat_count = 0
+        self.connection_timeout_seconds = 3
+        self.read_timeout_seconds = 10
         if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
@@ -822,16 +824,17 @@ class NBAPI_Task(threading.Thread):
             # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
             #     nbapi_root_json_blob = json.loads(f.read())
             logging.debug(f"Ping -> {self.ip}:{self.port} #{self.heartbeat_count}")
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=10)
+            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
             if not nbapi_root_request_response.ok:
-                break
-            logging.debug(f"Pong <- {self.ip}:{self.port} #{self.heartbeat_count}")
-            self.heartbeat_count = self.heartbeat_count + 1
-            nbapi_root_json_blob = nbapi_root_request_response.json()
-
-            global g_Topology
-            g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
-            sleep(self.cadence_ms // 1000)
+                logging.error(f"{self.ip}:{self.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
+                # break
+            else:
+                logging.debug(f"Pong <- {self.ip}:{self.port} #{self.heartbeat_count}")
+                self.heartbeat_count = self.heartbeat_count + 1
+                nbapi_root_json_blob = nbapi_root_request_response.json()
+                global g_Topology
+                g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
+                sleep(self.cadence_ms // 1000)
     def __repr__(self):
         return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}, data_q elements: {len(self.data_q)}"
     def quit(self):
