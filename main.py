@@ -205,6 +205,10 @@ def network_graph(topology: Topology):
                     # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
 
     pos = graphviz_layout(G, prog="dot")
+    # If the graph is empty, there's no EasyMesh nodes to render. Bail.
+    if len(pos.items()) == 0:
+        logging.debug("Zero nodes in the topology graph, skipping render cycle")
+        return go.Figure(data=[],layout=layout)
 
     # DEBUG: Calculate position range of the graphed nodes
     # x_axis_range = [min(pos.values(), key=lambda x: x[0])[0], max(pos.values(), key=lambda x: x[0])[0] ]
