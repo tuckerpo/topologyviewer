@@ -281,6 +281,13 @@ class Interface():
         return self.path[-2::][0]
     def get_hash_id(self) -> str:
         return hashlib.md5(self.path.encode()).hexdigest()
+    def get_mac(self) -> str:
+        return self.params['MACAddress']
+    def has_child_iface(self, mac: str) -> bool:
+        for child_iface in self.children:
+            if child_iface.get_mac() == mac:
+                return True
+        return False
 
 
 class Agent():
