@@ -685,10 +685,16 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             if e['parameters']['LinkType'] == "Ethernet":
                 # Search for backhaul interface on the device that is getting processed
                 for iface in interface_list:
-                    if iface.params['MACAddress'] == e['parameters']['MACAddress']:
-                        controller_backhaul_interface.add_child(iface)
-                        iface.orientation = ORIENTATION.UP
-                        controller_agent.add_child(iface.get_parent_agent())
+                    # TODO PPM-2043: HACK: prplMesh doesn't report Parent/Child Relation of Agent with Wired Connection
+                    # Instead, assume wired backhaul from agent(s) to controller on firt ethernet interface of agent.
+                    if iface.get_interface_number() == "1":
+                        if iface.get_mac() == controller_backhaul_interface.get_mac():
+                            continue
+                        if not controller_backhaul_interface.has_child_iface(iface.get_mac()):
+                            logging.debug(f"adding interface {iface.get_mac()} as child of controller's eth interface {controller_backhaul_interface.get_mac()}")
+                            controller_backhaul_interface.add_child(iface)
+                            iface.orientation = ORIENTATION.UP
+                            controller_agent.add_child(iface.get_parent_agent())
 
 
             elif e['parameters']['LinkType'] == "Wi-Fi":
