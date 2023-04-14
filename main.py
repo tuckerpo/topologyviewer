@@ -161,6 +161,7 @@ g_RenderState = {}
 def was_last_rendered_as_open_circle(agent: Agent) -> bool:
     if agent.get_id() in g_RenderState:
         return g_RenderState[agent.get_id()] == 'circle-open'
+    return False
 
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
@@ -204,11 +205,11 @@ def network_graph(topology: Topology):
                     # G.nodes()[sta.get_hash_mac()]['type'] = NodeType.STATION
                     # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
 
-    pos = graphviz_layout(G, prog="dot")
+    if len(G.nodes()) == 0:
     # If the graph is empty, there's no EasyMesh nodes to render. Bail.
-    if len(pos.items()) == 0:
         logging.debug("Zero nodes in the topology graph, skipping render cycle")
         return go.Figure(data=[],layout=layout)
+    pos = graphviz_layout(G, prog="dot")
 
     # DEBUG: Calculate position range of the graphed nodes
     # x_axis_range = [min(pos.values(), key=lambda x: x[0])[0], max(pos.values(), key=lambda x: x[0])[0] ]
