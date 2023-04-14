@@ -138,6 +138,12 @@ def add_edge_between_interfaces(iface1: Interface, iface_or_station, edge_interf
     edge_interfaces_y.append(iface_or_station.y)
     edge_interfaces_y.append(None)
 
+# Agent MAC -> Shape type, for blinking.
+g_RenderState = {}
+def was_last_rendered_as_open_circle(agent: Agent) -> bool:
+    if agent.get_id() in g_RenderState:
+        return g_RenderState[agent.get_id()] == 'circle-open'
+
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
@@ -214,10 +220,24 @@ def network_graph(topology: Topology):
         node_y.append(y)
         # if not G.nodes[node]['type']:
         #     G.nodes[node]['type'] = NodeType.STATION
+        global g_RenderState
+        shape_type = 'circle'
+        if G.nodes[node]['type'] == NodeType.AGENT or G.nodes[node]['type'] == NodeType.CONTROLLER:
+            agent = topology.get_agent_from_hash(node)
+            if len(agent.get_connected_stations()) == 0:
+                # No connected stations, don't blink.
+                shape_type = 'circle'
+            else:
+                if not was_last_rendered_as_open_circle(agent):
+                    shape_type = 'circle-open'
+                    g_RenderState[agent.get_id()] = shape_type
+                else:
+                    shape_type = 'circle'
+                    g_RenderState[agent.get_id()] = shape_type
         node_hover_text.append(gen_node_text(g_Topology, node, G.nodes[node]['type']))
         if G.nodes[node]['type'] == NodeType.CONTROLLER:
             node_sizes.append(52)
-            node_symbols.append('circle')
+            node_symbols.append(shape_type)
             node_colors.append('#AA29C5')
             node_labels.append("  prplMesh Controller + Agent<br>  running on prplOs")
         if G.nodes[node]['type'] == NodeType.AGENT:
