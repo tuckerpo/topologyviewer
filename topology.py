@@ -243,3 +243,17 @@ class Topology():
                 if bss.get_bssid() == bssid:
                     return bss
         return None
+    def get_agent_by_ruid(self, ruid: str) -> Agent:
+        """Get an Agent by RUID
+
+        Args:
+            ruid (str): The RUID
+
+        Returns:
+            Agent: the Agent if found, None otherwise
+        """
+        for agent in self.agents:
+            for radio in agent.get_radios():
+                if radio.get_ruid() == ruid:
+                    return agent
+        return None
