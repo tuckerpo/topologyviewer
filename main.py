@@ -18,16 +18,18 @@ from PIL import Image
 
 import validation
 from easymesh import (BSS, ORIENTATION, Agent, Interface, Neighbor, Radio,
-                      Station)
+                      Station, UnassociatedStation)
 from path_parser import parse_index_from_path_by_key
 from topology import Topology
 from nbapi_rpc import *
 from controller_ctx import ControllerConnectionCtx
 from http_auth import HTTPBasicAuthParams
+from colors import ColorSync
 
 app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
 
+g_StationsToRadio = {}
 class NodeType(Enum):
     UNKNOWN = 0
     STATION = 1
@@ -138,6 +140,29 @@ def add_edge_between_interfaces(iface1: Interface, iface_or_station, edge_interf
     edge_interfaces_y.append(iface_or_station.y)
     edge_interfaces_y.append(None)
 
+def get_color_for_agent(color_selector: ColorSync, agent: Agent) -> str:
+    """Gets a color string for a given agent.
+
+    Args:
+        color_selector (ColorSync): The color selector
+        agent (Agent): The Agent to get a color for
+
+    Returns:
+        str: The string representation of the color to be used for rendering (e.g. 'purple')
+    """
+    agent_mac = agent.get_id()
+    if not color_selector.knows_agent(agent_mac):
+        color_selector.add_agent(agent_mac)
+    return color_selector.get_color_for_agent(agent_mac)
+
+g_ColorSync = ColorSync('green')
+# Agent MAC -> Shape type, for blinking.
+g_RenderState = {}
+def was_last_rendered_as_open_circle(agent: Agent) -> bool:
+    if agent.get_id() in g_RenderState:
+        return g_RenderState[agent.get_id()] == 'circle-open'
+    return False
+
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
@@ -180,6 +205,10 @@ def network_graph(topology: Topology):
                     # G.nodes()[sta.get_hash_mac()]['type'] = NodeType.STATION
                     # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
 
+    if len(G.nodes()) == 0:
+    # If the graph is empty, there's no EasyMesh nodes to render. Bail.
+        logging.debug("Zero nodes in the topology graph, skipping render cycle")
+        return go.Figure(data=[],layout=layout)
     pos = graphviz_layout(G, prog="dot")
 
     # DEBUG: Calculate position range of the graphed nodes
@@ -214,16 +243,33 @@ def network_graph(topology: Topology):
         node_y.append(y)
         # if not G.nodes[node]['type']:
         #     G.nodes[node]['type'] = NodeType.STATION
+        global g_RenderState
+        shape_type = 'circle'
+        if G.nodes[node]['type'] == NodeType.AGENT or G.nodes[node]['type'] == NodeType.CONTROLLER:
+            agent = topology.get_agent_from_hash(node)
+            if len(agent.get_connected_stations()) == 0:
+                # No connected stations, don't blink.
+                shape_type = 'circle'
+            else:
+                if not was_last_rendered_as_open_circle(agent):
+                    shape_type = 'circle-open'
+                    g_RenderState[agent.get_id()] = shape_type
+                else:
+                    shape_type = 'circle'
+                    g_RenderState[agent.get_id()] = shape_type
         node_hover_text.append(gen_node_text(g_Topology, node, G.nodes[node]['type']))
-        if G.nodes[node]['type'] == NodeType.CONTROLLER:
+        node_type = G.nodes[node]['type']
+        if node_type == NodeType.CONTROLLER:
+            agent = topology.get_agent_from_hash(node)
             node_sizes.append(52)
-            node_symbols.append('circle')
-            node_colors.append('#AA29C5')
+            node_symbols.append(shape_type)
+            node_colors.append(get_color_for_agent(g_ColorSync, agent))
             node_labels.append("  prplMesh Controller + Agent<br>  running on prplOs")
         if G.nodes[node]['type'] == NodeType.AGENT:
+            agent = topology.get_agent_from_hash(node)
             node_sizes.append(45)
-            node_symbols.append('circle')
-            node_colors.append('green')
+            node_symbols.append(shape_type)
+            node_colors.append(get_color_for_agent(g_ColorSync, agent))
             if topology.get_agent_from_hash(node).params["ManufacturerModel"] == "Ubuntu": # RDKB
                 node_labels.append("  prplMesh Agent on RDK-B<br>  (Turris-Omnia)")
             elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "X5042": # ARRIS/ COMMSCOPE 3ʳᵈ
@@ -239,8 +285,12 @@ def network_graph(topology: Topology):
             node_sizes.append(35)
             node_symbols.append('circle-open')
             node_colors.append('red')
-            if topology.get_station_from_hash(node).get_steered():
+            sta = topology.get_station_from_hash(node)
+            if sta.get_steered():
                 node_labels.append(f'  Client STA: {topology.get_station_from_hash(node).params["MACAddress"][-2::]}<br>  steered by prplMesh Controller<br>  via prplMesh Northbound API')# + topology.get_station_from_hash(node).params["mac"])
+            elif 'Hostname' in sta.params and sta.params['Hostname'] and sta.params['Hostname'] != '0':
+                hostname = sta.params['Hostname'] + '-' + sta.params['MACAddress'][-2::]
+                node_labels.append(f'Client STA: {hostname}')
             else:
                 node_labels.append(f'  Client STA: {topology.get_station_from_hash(node).params["MACAddress"][-2::]}')
 
@@ -492,10 +542,24 @@ app.layout = html.Div([
             ),
             html.Div(
                 className="eight columns",
-                children=[dcc.Graph(id="my-graph",
-                                    figure=network_graph(g_Topology), animate=True, config={'displayModeBar': True}),
-                          dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
-                style={'height': '1000px'}
+                children=[
+                    html.Div(
+                        className="twelve columns",
+                        children=[dcc.Graph(id="my-graph",
+                                            figure=network_graph(g_Topology), animate=True, config={'displayModeBar': True}),
+                                dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
+                        style={'height': '800px'}
+                    ),
+                    html.Div(
+                        className="twelve columns",
+                        children=[dcc.Graph(id="rssi-plot",
+                                figure=dict(
+                                    layout=dict(
+                                    )
+                                ), config={'displayModeBar': True}),
+                                dcc.Interval(id='rssi-plot-interval', interval=500, n_intervals=0)],
+                    ),
+                ]
             ),
             html.Div(
                 className="two columns",
@@ -532,6 +596,14 @@ app.layout = html.Div([
         ]
     )
 ])
+
+# RUID -> STA_MAC -> [RSSI measurements]
+g_RSSI_Measurements = {}
+
+stations_have_moved = []
+def handle_station_moved(sta: Station, radio: Radio) -> None:
+    logging.debug(f"Station {sta.get_mac()} has moved! From {g_StationsToRadio[sta.get_mac()]} to {radio.get_ruid()}")
+    stations_have_moved.append(sta.get_mac())
 
 def marshall_nbapi_blob(nbapi_json) -> Topology:
     """Parse a list of NBAPI json entries
@@ -614,10 +686,16 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             if e['parameters']['LinkType'] == "Ethernet":
                 # Search for backhaul interface on the device that is getting processed
                 for iface in interface_list:
-                    if iface.params['MACAddress'] == e['parameters']['MACAddress']:
-                        controller_backhaul_interface.add_child(iface)
-                        iface.orientation = ORIENTATION.UP
-                        controller_agent.add_child(iface.get_parent_agent())
+                    # TODO PPM-2043: HACK: prplMesh doesn't report Parent/Child Relation of Agent with Wired Connection
+                    # Instead, assume wired backhaul from agent(s) to controller on firt ethernet interface of agent.
+                    if iface.get_interface_number() == "1":
+                        if iface.get_mac() == controller_backhaul_interface.get_mac():
+                            continue
+                        if not controller_backhaul_interface.has_child_iface(iface.get_mac()):
+                            logging.debug(f"adding interface {iface.get_mac()} as child of controller's eth interface {controller_backhaul_interface.get_mac()}")
+                            controller_backhaul_interface.add_child(iface)
+                            iface.orientation = ORIENTATION.UP
+                            controller_agent.add_child(iface.get_parent_agent())
 
 
             elif e['parameters']['LinkType'] == "Wi-Fi":
@@ -665,10 +743,22 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             sta = Station(e['path'], e['parameters'])
                             station_list.append(sta)
                             bss.add_connected_station(sta)
+                            if sta.get_mac() in g_StationsToRadio and g_StationsToRadio[sta.get_mac()] != radio.get_ruid():
+                                handle_station_moved(sta, radio)
+                                del g_StationsToRadio[sta.get_mac()]
+                            g_StationsToRadio[sta.get_mac()] = radio.get_ruid()
                             bss.interface.orientation = ORIENTATION.DOWN
                             # Exclude stations that are actually agents
                             if not bss.interface.get_parent_agent().is_child(sta.get_mac()): #if not bss.interface.is_child(sta.get_mac()):
                                 bss.interface.add_connected_station(sta)
+                            # Append RSSI measurements.
+                            if radio.get_ruid() not in g_RSSI_Measurements:
+                                g_RSSI_Measurements[radio.get_ruid()] = {}
+                            else:
+                                if sta.get_mac() not in g_RSSI_Measurements[radio.get_ruid()]:
+                                    g_RSSI_Measurements[radio.get_ruid()][sta.get_mac()] = []
+                                else:
+                                    g_RSSI_Measurements[radio.get_ruid()][sta.get_mac()].append(sta.get_rssi())
 
     # 8. Check and set stations steering history
     for e in nbapi_json:
@@ -676,6 +766,21 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             for station in station_list:
                 if station.params["MACAddress"] == e["parameters"]["DeviceId"] and e["parameters"]["Result"] == "Success":
                     station.set_steered(True)
+
+    for e in nbapi_json:
+        if re.search(r"\.UnassociatedSTA\.\d{1,10}\.$", e['path']):
+            for agent in agent_list:
+                for radio in agent.get_radios():
+                    if e['path'].startswith(radio.path):
+                        unassoc_sta = UnassociatedStation(e['path'], e['parameters'])
+                        unassoc_sta.set_parent_radio(radio)
+                        if radio.get_ruid() not in g_RSSI_Measurements:
+                            g_RSSI_Measurements[radio.get_ruid()] = {}
+                        else:
+                            if unassoc_sta.get_mac() not in g_RSSI_Measurements[radio.get_ruid()]:
+                                g_RSSI_Measurements[radio.get_ruid()][unassoc_sta.get_mac()] = []
+                            else:
+                                g_RSSI_Measurements[radio.get_ruid()][unassoc_sta.get_mac()].append(e['parameters']['SignalStrength'])
 
     # DEBUG
     # for i, agent in enumerate(agent_list):
@@ -714,6 +819,9 @@ class NBAPI_Task(threading.Thread):
         self.port = connection_ctx.port
         self.cadence_ms = cadence_ms
         self.quitting = False
+        self.heartbeat_count = 0
+        self.connection_timeout_seconds = 3
+        self.read_timeout_seconds = 10
         if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
@@ -726,15 +834,18 @@ class NBAPI_Task(threading.Thread):
             # DEBUG: Load previously dumped JSON response
             # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
             #     nbapi_root_json_blob = json.loads(f.read())
-
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=3)
+            logging.debug(f"Ping -> {self.ip}:{self.port} #{self.heartbeat_count}")
+            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
             if not nbapi_root_request_response.ok:
-                break
-            nbapi_root_json_blob = nbapi_root_request_response.json()
-
-            global g_Topology
-            g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
-            sleep(self.cadence_ms // 1000)
+                logging.error(f"{self.ip}:{self.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
+                # break
+            else:
+                logging.debug(f"Pong <- {self.ip}:{self.port} #{self.heartbeat_count}")
+                self.heartbeat_count = self.heartbeat_count + 1
+                nbapi_root_json_blob = nbapi_root_request_response.json()
+                global g_Topology
+                g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
+                sleep(self.cadence_ms // 1000)
     def __repr__(self):
         return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}, data_q elements: {len(self.data_q)}"
     def quit(self):
@@ -742,6 +853,26 @@ class NBAPI_Task(threading.Thread):
         self.quitting = True
 
 nbapi_thread = None
+
+'''
+For keeping track of the last clicked station, for the RSSI plotting.
+'''
+LAST_CLICKED_STATION: Station = None
+def get_last_clicked_station() -> Station:
+    """Gets the last station node clicked in the topology graph.
+
+    Returns:
+        Station: The last clicked station.
+    """
+    return LAST_CLICKED_STATION
+def set_last_clicked_station(last_clicked_sta: Station) -> None:
+    """Sets the last station node clicked in the topology graph.
+
+    Args:
+        last_clicked_sta (Station): The last clicked station.
+    """
+    global LAST_CLICKED_STATION
+    LAST_CLICKED_STATION = last_clicked_sta
 
 # Component callbacks
 @app.callback(
@@ -884,6 +1015,8 @@ def node_click(clickData):
 
     sta = g_Topology.get_station_from_hash(node_hash)
     if sta:
+        logging.debug("Station clicked!")
+        set_last_clicked_station(sta)
         return json.dumps(sta.params, indent=2)
 
     interface = g_Topology.get_interface_from_hash(node_hash)
@@ -991,6 +1124,79 @@ def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str)
     dummy_client_mac_addr = "aa:bb:cc:dd:ee:ff"
     send_vbss_destruction_request(g_ControllerConnectionCtx, dummy_client_mac_addr, should_disassociate, bss)
     return f"Sent VBSS destruction request for '{bssid}'"
+
+
+def sta_has_moved(sta_mac: str) -> bool:
+    ret = False
+    if sta_mac in stations_have_moved:
+        ret = True
+        stations_have_moved.remove(sta_mac)
+    return ret
+
+#  station -> list of moves
+g_Transition_X_Positions = {}
+@app.callback(
+    Output('rssi-plot', 'figure'),
+    Input('rssi-plot-interval', 'n_intervals')
+)
+def update_rssi_plot(n_intervals: int):
+    """Adds data points for the currently selected station in the 'rssi-plot' div.
+
+    Args:
+        int (n_intervals): Number of times this callback has fired.
+    """
+    global RSSI_RELATIVE_TO_RADIO
+    station_of_interest = get_last_clicked_station()
+    if not station_of_interest:
+        # Log that there's no station selected once.
+        if (n_intervals == 0):
+            logging.debug("No station!")
+        return dict()
+    selected_sta_mac = station_of_interest.get_mac()
+    # Store as a static variable so we can clear the RSSI table when a new station is selected.
+    if update_rssi_plot.last_sta == None:
+        update_rssi_plot.last_sta = station_of_interest
+    if update_rssi_plot.last_sta.get_mac() != selected_sta_mac:
+        logging.debug(f"New station clicked ({selected_sta_mac}), resetting plot data")
+        update_rssi_plot.last_sta = station_of_interest
+    
+
+    fig = go.Figure()
+
+    unassoc_color_lut = {}
+    for key in g_RSSI_Measurements.items():
+        radio_mac = key[0]
+        agent = g_Topology.get_agent_by_ruid(radio_mac)
+        unassoc_color_lut[radio_mac] = get_color_for_agent(g_ColorSync, agent)
+
+    # We need to render curves starting at the most recent move, instead of t=0
+    initial_x_offset = 0
+    for ruid, sta_list in g_RSSI_Measurements.items():
+        for sta_mac, measurement_list in sta_list.items():
+            if sta_mac == selected_sta_mac:
+                y_axis_vals = measurement_list
+                a = max(len(measurement_list), 500)
+                x_axis_vals = list(range(initial_x_offset, a))
+                trace_name = f"STA {station_of_interest.params['Hostname']} ({selected_sta_mac}) relative to radio {ruid}"
+                trace = go.Scatter(x=x_axis_vals, y=y_axis_vals, marker=dict(color=unassoc_color_lut[ruid]), name=trace_name, mode="lines", hoverinfo="all")
+                fig.add_trace(trace)
+                if sta_has_moved(sta_mac):
+                    logging.debug(f"station has moved, drawing vertical marker.")
+                    if sta_mac not in g_Transition_X_Positions:
+                        g_Transition_X_Positions[sta_mac] = []
+                    pos = len(measurement_list) - 1
+                    g_Transition_X_Positions[sta_mac].append(pos)
+                    trace_name = f"VBSS move for STA {sta_mac}" 
+
+    # Must render each VBSS move every render cycle to maintain VBSS move history in the plot.
+    for station_mac, move_list in g_Transition_X_Positions.items():
+        if station_mac == selected_sta_mac:
+            for move_position in move_list:
+                logging.debug(f"move for STA {sta_mac} happened at {move_position}")
+                fig.add_vline(x=move_position, line_width=3, line_dash='dash', line_color='black')
+    return fig
+# Init callback function attribute (static)
+update_rssi_plot.last_sta = None
 
 if __name__ == '__main__':
     # Silence imported module logs

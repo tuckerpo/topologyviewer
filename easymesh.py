@@ -58,6 +58,22 @@ class Station():
         return self.is_steered
     def set_steered(self, steered: bool) -> None:
         self.is_steered = steered
+    def get_rssi(self) -> int:
+        """
+        Get this station's last signal strength measurement.
+        Note: this returns the signal strength of this station relative to the Agent that it is connected to.
+        Returns:
+            int: The signal strength. -127 if the field is not present.
+        """
+        if 'RSSI' in self.params:
+            return self.params['RSSI']
+        elif 'SignalStrength' in self.params:
+            return self.params['SignalStrength']
+        elif 'RCPI' in self.params:
+            return self.params['RCPI']
+        else:
+            # Return -INT8_MAX, assuming dBm
+            return -127
 
 class BSS():
     def __init__(self, path, params) -> None:
@@ -88,6 +104,58 @@ class BSS():
             return self.params['IsVBSS']
         return False
 
+
+
+class UnassociatedStationRSSIMeasurement():
+    def __init__(self, station: str, signal_strength: int, channel_number: int, timestamp: int, ruid: str):
+        self.station = station
+        self.signal_strength = signal_strength
+        self.channel_number = channel_number
+        self.timestamp = timestamp
+        self.ruid = ruid
+    def get_signal_strength(self) -> int:
+        return self.signal_strength
+    def get_channel_number(self) -> int:
+        return self.channel_number
+    def get_parent_ruid(self) -> str:
+        """The ruid of the Radio that saw this measurement.
+
+
+        Returns:
+            str: The RUID
+        """
+        return self.ruid
+    def get_timestamp(self) -> int:
+        return self.timestamp
+
+class UnassociatedStation():
+    def __init__(self, path, params) -> None:
+        self.path = path
+        self.params = params
+        self.rssi_measurements: List[UnassociatedStationRSSIMeasurement] = []
+        self.parent_radio = None
+    def get_mac(self) -> str:
+        if 'MACAddress' in self.params:
+            return self.params['MACAddress']
+        return ''
+    def set_parent_radio(self, radio) -> None:
+        self.parent_radio = radio
+    def add_rssi_measurement(self, params) -> None:
+        rcpi = 0
+        timestamp = 0
+        ch_num = 0
+        if 'SignalStrength' in params:
+            rcpi = params['SignalStrength']
+        if 'Timestamp' in params:
+            timestamp = params['Timestamp']
+        if 'ChannelNumer' in params:
+            ch_num = params['ChannelNumber']
+        self.rssi_measurements.append(UnassociatedStationRSSIMeasurement(self.get_mac(), rcpi, ch_num, timestamp, self.parent_radio.get_ruid()))
+    def get_rssi_measurements(self):
+        return self.rssi_measurements
+    def get_parent_radio(self):
+        return self.parent_radio
+
 class Radio():
     def __init__(self, path, params) -> None:
         self.path = path
@@ -95,6 +163,7 @@ class Radio():
         self.bsses: List[BSS] = []
         self.bss_key = 'BSS'
         self.params[self.bss_key] = []
+        self.unassociated_stations: List[UnassociatedStation] = []
     def add_bss(self, bss) -> None:
         self.bsses.append(bss)
         self.params[self.bss_key].append(bss.params)
@@ -104,6 +173,42 @@ class Radio():
         return ''
     def get_bsses(self) -> List[BSS]:
         return self.bsses
+    def get_unassociated_stations(self) -> List[UnassociatedStation]:
+        return self.unassociated_stations
+    def add_unassociated_station(self, station: UnassociatedStation) -> None:
+        self.unassociated_stations.append(station)
+    def get_rssi_for_sta(self, sta: Station) -> int:
+        """Gets the unassociated RSSI that this Radio has heard for a Station.
+
+        Args:
+            sta (Station): The station of interest
+
+        Raises:
+            ValueError: If the station is not being sniffed by this radio.
+
+        Returns:
+            int: The RSSI of the station relative to this radio.
+        """
+        station = self.get_unassociated_station_by_mac(sta.get_mac())
+        if not station:
+            raise ValueError("Unknown station: {}".format(sta.get_mac()))
+        return station.get_rssi()
+    def update_unassociated_sta(self, unassoc_sta: UnassociatedStation, params) -> None:
+        sta = self.get_unassociated_station_by_mac(unassoc_sta.get_mac())
+        sta.add_rssi_measurement(params)
+    def get_unassociated_station_by_mac(self, mac: str) -> UnassociatedStation:
+        """Get the unassociated Station object whose MAC is 'mac'
+
+        Args:
+            mac (str): The unassociated STA MAC of interest
+
+        Returns:
+            UnassociatedStation: The station if found, otherwise None.
+        """
+        for station in self.unassociated_stations:
+            if station.get_mac() == mac:
+                return station
+        return None
 
 class Neighbor():
     def __init__(self, path, params) -> None:
@@ -176,6 +281,13 @@ class Interface():
         return self.path[-2::][0]
     def get_hash_id(self) -> str:
         return hashlib.md5(self.path.encode()).hexdigest()
+    def get_mac(self) -> str:
+        return self.params['MACAddress']
+    def has_child_iface(self, mac: str) -> bool:
+        for child_iface in self.children:
+            if child_iface.get_mac() == mac:
+                return True
+        return False
 
 
 class Agent():
