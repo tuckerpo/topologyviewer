@@ -36,8 +36,3 @@ To reproduce this demo, follow the steps in `DEMO.md`
 
 `python tests.py`
 
-## **TODO:**
-
-- Unassociated stations. Not handled in the UI, because they're not handled in prplMesh itself.
-
-- RSSI/time plotting, to visualize VBSS switching decisions. Good for a demo.
