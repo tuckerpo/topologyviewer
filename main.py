@@ -1,9 +1,32 @@
+# pylint: disable=import-error, line-too-long, logging-fstring-interpolation, fixme, global-statement, too-many-lines, invalid-name, too-many-nested-blocks, too-many-branches, too-many-statements, too-many-locals, use-dict-literal, too-many-instance-attributes, too-many-arguments, too-many-return-statements, not-callable
+
+"""
+This module starts an HTTP client to an EasyMesh controller and begins polling for updates.
+It then renders the updates on a web UI using a Dash app.
+
+Functions:
+----------
+__main__():
+    Starts the HTTP client and web UI, sets the logging level and runs the server in debug mode.
+
+Attributes:
+-----------
+None.
+
+Usage:
+------
+Run the module to start the HTTP client and web UI, and begin polling for updates.
+
+Example:
+--------
+python my_easy_mesh_app.py
+"""
+
 import json
 import logging
 import re
 import threading
 from enum import Enum
-from pprint import pformat, pprint
 from textwrap import dedent as d
 from time import sleep
 from typing import List
@@ -19,9 +42,9 @@ from PIL import Image
 import validation
 from easymesh import (BSS, ORIENTATION, Agent, Interface, Neighbor, Radio,
                       Station, UnassociatedStation)
-from path_parser import parse_index_from_path_by_key
 from topology import Topology
-from nbapi_rpc import *
+from nbapi_rpc import (send_client_steering_request, send_vbss_move_request,
+                    send_vbss_creation_request, send_vbss_destruction_request)
 from controller_ctx import ControllerConnectionCtx
 from http_auth import HTTPBasicAuthParams
 from colors import ColorSync
@@ -31,6 +54,8 @@ app.title = 'CableLabs EasyMesh Network Monitor'
 
 g_StationsToRadio = {}
 class NodeType(Enum):
+    """Enum representation of different node types in an EasyMesh network.
+    """
     UNKNOWN = 0
     STATION = 1
     AGENT = 2
@@ -39,83 +64,145 @@ class NodeType(Enum):
 marker_references = [] # Used in the click callback to find the node clicked on
 
 def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
-    # TODO: This will need some massaging for VBSS.
-    station_fmt = "Station: MAC: {} ConnectedTo: {}"
-    agent_fmt = "Agent: Model: {} NumRadios: {}"
-    if node_type == NodeType.STATION:
-        station_obj = topology.get_station_from_hash(node_id)
-        if not station_obj:
-            return "Station"
-        return station_fmt.format(station_obj.get_mac(), topology.get_bssid_connection_for_sta(station_obj.get_mac()))
-    elif node_type == NodeType.AGENT or node_type == NodeType.CONTROLLER:
-        agent_obj = topology.get_agent_from_hash(node_id)
-        if not agent_obj:
-            return "Agent"
-        return agent_fmt.format(agent_obj.get_manufacturer(), agent_obj.num_radios())
-    else:
+    """
+    Generate text representation for a given node based on its type and ID.
+
+    Parameters:
+    -----------
+    topology : Topology
+        The topology object that contains the node information.
+
+    node_id : str
+        The ID of the node to generate text representation for.
+
+    node_type : NodeType
+        The type of the node to generate text representation for.
+
+    Returns:
+    --------
+    str
+        The text representation of the node.
+    """
+    node_type_dict = {
+        NodeType.STATION: (topology.get_station_from_hash, "Station: MAC: {} ConnectedTo: {}"),
+        NodeType.AGENT: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {}"),
+        NodeType.CONTROLLER: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {}")
+    }
+    if node_type not in node_type_dict:
         return "Unknown! This shouldn't happen."
+    get_node_method, node_format = node_type_dict[node_type]
+    node_obj = get_node_method(node_id)
+    if not node_obj:
+        return "Node"
+    if node_type == NodeType.STATION:
+        return node_format.format(node_obj.get_mac(), topology.get_bssid_connection_for_sta(node_obj.get_mac()))
+    if node_type in [NodeType.AGENT, NodeType.CONTROLLER]:
+        return node_format.format(node_obj.get_manufacturer(), node_obj.num_radios())
+    return ""
+
 
 def add_children_to_graph_recursive(agent: Agent, graph):
-    global point
+    """
+    Recursively add children and connected stations of the given Agent to the provided networkx Graph.
+
+    Parameters:
+    -----------
+    agent : Agent
+        The Agent object whose children and connected stations will be added to the graph.
+
+    graph : networkx.Graph
+        The graph to which the children and connected stations will be added.
+
+    Returns:
+    --------
+    None.
+
+    Raises:
+    -------
+    None.
+
+    Usage:
+    ------
+    This function can be used to recursively add children and connected stations of an Agent to a networkx Graph.
+
+    Example:
+    --------
+    add_children_to_graph_recursive(agent, graph)
+    """
     for child in agent.get_children():
         marker_references.append(child.get_hash_id())
         graph.add_node(child.get_hash_id())
         graph.nodes()[child.get_hash_id()]['type'] = NodeType.AGENT
-        #graph.nodes()[child.get_hash_id()]['params'] = child.params
         add_children_to_graph_recursive(child, graph)
 
     for sta in agent.get_connected_stations():
         marker_references.append(sta.get_hash_mac())
         graph.add_node(sta.get_hash_mac())
         graph.nodes()[sta.get_hash_mac()]['type'] = NodeType.STATION
-        #graph.nodes()[sta.get_hash_mac()]['params'] = sta.params
 
 
 def get_iface_markers(agent: Agent):
-    x_distance = 14 # Distance between two interface markers
-    x_min = 20      # Distance between the agent marker and the interface marker
+    """
+    Get interface markers for an Agent.
+
+    Parameters:
+    - agent (Agent): The agent whose interface markers will be obtained.
+
+    Returns:
+    A dictionary with the following keys:
+        - 'x' (list): List of X positions of interface markers.
+        - 'y' (list): List of Y positions of interface markers.
+        - 'node_labels' (list): List of node labels.
+        - 'node_hover_text' (list): List of node hover text.
+        - 'node_colors' (list): List of node colors.
+        - 'node_sizes' (list): List of node sizes.
+        - 'node_symbols' (list): List of node symbols.
+
+    This function obtains interface markers for an Agent using its orientation and interfaces. The markers are positioned in such a way that they are visible and do not overlap with the Agent marker. The markers have diamond shapes and are colored red or blue depending on whether the interface is wired or not. The function returns a dictionary containing the lists of X and Y positions, node labels, node hover text, node colors, node sizes and node symbols of the interface markers.
+    """
+    x_distance = 14  # Distance between two interface markers
+    x_min = 20       # Distance between the agent marker and the interface marker
     y_distance = 7
     y_min = 8
 
-    node_x = []
-    node_y = []
-    node_labels = []
-    node_hover_text = []
-    node_colors = []
-    node_sizes = []
-    node_symbols = []
+    interfaces_by_orientation = [
+        agent.get_interfaces_by_orientation(ORIENTATION.UP),
+        agent.get_interfaces_by_orientation(ORIENTATION.RIGHT),
+        agent.get_interfaces_by_orientation(ORIENTATION.DOWN)
+    ]
 
-    interfaces = agent.get_interfaces_by_orientation(ORIENTATION.UP)
-    x0 = agent.x - (len(interfaces)/2)*x_distance
-    y0 = agent.y + y_min
-    if (len(interfaces)%2) != 0:
-        x0 = x0 + x_distance/2
-    for i in interfaces:
-        i.x = x0
-        i.y = y0
-        x0 = x0 + x_distance
+    node_x, node_y, node_labels = [], [], []
+    node_hover_text, node_colors, node_sizes, node_symbols = [], [], [], []
 
-    interfaces = agent.get_interfaces_by_orientation(ORIENTATION.RIGHT)
-    x0 = agent.x + x_min
-    y0 = agent.y - (len(interfaces)/2)*y_distance
-    if (len(interfaces)%2) != 0:
-        y0 = y0 + y_distance/2
-    else:
-        y0 = y0 + y_distance/2
-    for i in interfaces:
-        i.x = x0
-        i.y = y0
-        y0 = y0 + y_distance
+    for idx, interfaces in enumerate(interfaces_by_orientation):
+        x0, y0 = agent.x, agent.y
+        if idx == 0:
+            # UP
+            x0 -= (len(interfaces) / 2) * x_distance
+            y0 += y_min
+        elif idx == 1:
+            # RIGHT
+            x0 += x_min
+            y0 -= (len(interfaces) / 2) * y_distance + y_distance / 2
+        else:
+            # DOWN
+            x0 -= (len(interfaces) / 2) * x_distance
+            y0 -= y_min
 
-    interfaces = agent.get_interfaces_by_orientation(ORIENTATION.DOWN)
-    x0 = agent.x - (len(interfaces)/2)*x_distance
-    y0 = agent.y - y_min
-    if (len(interfaces)%2) != 0:
-        x0 = x0 + x_distance/2
-    for i in interfaces:
-        i.x = x0
-        i.y = y0
-        x0 = x0 + x_distance
+        if len(interfaces) % 2 != 0:
+            if idx == 0:
+                x0 += x_distance / 2
+            else:
+                y0 += y_distance / 2
+
+        for i in interfaces:
+            i.x, i.y = x0, y0
+            if idx == 0:
+                x0 += x_distance
+            elif idx == 1:
+                y0 += y_distance
+            else:
+                x0 += x_distance
 
     for i in agent.get_interfaces():
         marker_references.append(i.get_hash_id())
@@ -125,14 +212,28 @@ def get_iface_markers(agent: Agent):
         node_hover_text.append(f'Interface {i.get_interface_number()} with MAC: {i.params["MACAddress"]} and type: {i.params["MediaTypeString"]}')
         node_sizes.append(14)
         node_symbols.append("diamond")
-        if i.params["wired"]:
-            node_colors.append("red")
-        else:
-            node_colors.append("blue")
+        node_colors.append("red" if i.params["wired"] else "blue")
 
-    return {'x': node_x, 'y': node_y, 'node_labels': node_labels, 'node_hover_text': node_hover_text, 'node_colors': node_colors, 'node_sizes': node_sizes, 'node_symbols': node_symbols}
+    return {
+        'x': node_x,
+        'y': node_y,
+        'node_labels': node_labels,
+        'node_hover_text': node_hover_text,
+        'node_colors': node_colors,
+        'node_sizes': node_sizes,
+        'node_symbols': node_symbols
+    }
 
 def add_edge_between_interfaces(iface1: Interface, iface_or_station, edge_interfaces_x, edge_interfaces_y):
+    """
+    Adds an edge between two interfaces or between an interface and a station to the graph.
+
+    Args:
+        iface1 (Interface): The first interface to connect.
+        iface_or_station: The interface or station to connect to the first interface.
+        edge_interfaces_x (list): The x-coordinates of the edge interfaces.
+        edge_interfaces_y (list): The y-coordinates of the edge interfaces.
+    """
     edge_interfaces_x.append(iface1.x)
     edge_interfaces_x.append(iface_or_station.x)
     edge_interfaces_x.append(None)
@@ -159,6 +260,14 @@ g_ColorSync = ColorSync('green')
 # Agent MAC -> Shape type, for blinking.
 g_RenderState = {}
 def was_last_rendered_as_open_circle(agent: Agent) -> bool:
+    """Checks if a given Agent was last rendered as a solid or open-circle
+
+    Args:
+        agent (Agent): The Agent to check the last render state for.
+
+    Returns:
+        bool: True if the given Agent was last rendered as an open-circle, False otherwise.
+    """
     if agent.get_id() in g_RenderState:
         return g_RenderState[agent.get_id()] == 'circle-open'
     return False
@@ -166,7 +275,19 @@ def was_last_rendered_as_open_circle(agent: Agent) -> bool:
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
+    """
+    This function generates a network graph of the given topology using the plotly library.
 
+    Parameters:
+    ----------
+    topology: Topology
+        The topology object to generate the network graph for.
+
+    Returns:
+    -------
+    plotly.graph_objs._figure.Figure
+        A plotly Figure object containing the network graph of the topology. If there are no nodes in the graph, an empty figure will be returned.
+    """
     layout=go.Layout(
                     # TODO: height (and width) should probably come from viewport calculation.
                     height=800,
@@ -187,7 +308,6 @@ def network_graph(topology: Topology):
     marker_references.append(topology.controller.get_hash_id())
     G.add_node(topology.controller.get_hash_id())
     G.nodes()[topology.controller.get_hash_id()]['type'] = NodeType.CONTROLLER
-    #G.nodes()[topology.controller.get_hash_id()]['params'] = topology.controller.params
     add_children_to_graph_recursive(topology.controller, G)
 
     # Add edges/connections between agents (builds general graph)
@@ -196,14 +316,10 @@ def network_graph(topology: Topology):
             for child_iface in ifc.get_children():
                 if not child_iface.get_children():
                     G.add_edge(child_iface.get_parent_agent().get_hash_id(), ifc.get_parent_agent().get_hash_id())
-                    # G.nodes()[child_iface.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
-                    # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
 
             if ifc.get_connected_stations():
                 for sta in ifc.get_connected_stations():
                     G.add_edge(sta.get_hash_mac(), ifc.get_parent_agent().get_hash_id())
-                    # G.nodes()[sta.get_hash_mac()]['type'] = NodeType.STATION
-                    # G.nodes()[ifc.get_parent_agent().get_hash_id()]['type'] = NodeType.AGENT
 
     if len(G.nodes()) == 0:
     # If the graph is empty, there's no EasyMesh nodes to render. Bail.
@@ -241,9 +357,6 @@ def network_graph(topology: Topology):
         x, y = G.nodes[node]['pos']
         node_x.append(x)
         node_y.append(y)
-        # if not G.nodes[node]['type']:
-        #     G.nodes[node]['type'] = NodeType.STATION
-        global g_RenderState
         shape_type = 'circle'
         if G.nodes[node]['type'] == NodeType.AGENT or G.nodes[node]['type'] == NodeType.CONTROLLER:
             agent = topology.get_agent_from_hash(node)
@@ -431,7 +544,6 @@ def network_graph(topology: Topology):
     full_fig = fig.full_figure_for_development(warn=False)
     x_range = full_fig.layout.xaxis.range
     y_range = full_fig.layout.yaxis.range
-    #print(f'X axis range: {x_range}  - Y axis range: {y_range}')
 
     # Adjust range/scaling based on autorange calculation
     if abs(x_range[1]-x_range[0]) < 40:
@@ -602,6 +714,16 @@ g_RSSI_Measurements = {}
 
 stations_have_moved = []
 def handle_station_moved(sta: Station, radio: Radio) -> None:
+    """
+    The function `handle_station_moved` takes a `Station` object `sta` and a `Radio` object `radio` as input parameters. It logs a debug message indicating that the station has moved from its previous radio to the new radio. It then appends the MAC address of the station to a list called `stations_have_moved`.
+
+    Args:
+    - sta: A `Station` object representing the station that has moved.
+    - radio: A `Radio` object representing the radio to which the station has moved.
+
+    Returns:
+    - None. The function only logs a debug message and appends the MAC address of the moved station to the `stations_have_moved` list.
+    """
     logging.debug(f"Station {sta.get_mac()} has moved! From {g_StationsToRadio[sta.get_mac()]} to {radio.get_ruid()}")
     stations_have_moved.append(sta.get_mac())
 
@@ -619,7 +741,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     """
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
-    if type(nbapi_json) is not list:
+    if not isinstance(nbapi_json, list):
         return Topology({}, {})
 
     # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're done figuring things out.
@@ -668,12 +790,12 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     if not controller_backhaul_interface:
         for agent in agent_list:
             if agent.get_id() == g_controller_id:
-                    controller_agent = agent
-                    for iface in agent.get_interfaces():
-                        if iface.params['MediaType']<=1:
-                            controller_backhaul_interface = iface
-                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                            break
+                controller_agent = agent
+                for iface in agent.get_interfaces():
+                    if iface.params['MediaType']<=1:
+                        controller_backhaul_interface = iface
+                        controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                        break
 
 
     # 4. Link interfaces to parents
@@ -811,11 +933,30 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 g_ControllerConnectionCtx = None
 
 class NBAPI_Task(threading.Thread):
+    """
+    A class for a worker thread that periodically retrieves the network topology using NBAPI.
+
+    Attributes:
+        connection_ctx (ControllerConnectionCtx): The controller connection context object.
+        cadence_ms (int): The cadence in milliseconds between topology retrievals.
+
+    Raises:
+        ValueError: If a None connection context is passed to the constructor.
+
+    Methods:
+        run(self) -> None:
+            The method that will be executed when the thread is started.
+            It periodically retrieves the network topology using NBAPI.
+        __repr__(self) -> str:
+            Returns a string representation of the NBAPI_Task object.
+        quit(self) -> None:
+            Sets the quitting flag to True, signaling the thread to exit gracefully.
+    """
     def __init__(self, connection_ctx: ControllerConnectionCtx, cadence_ms: int = 1000):
         if not connection_ctx:
             raise ValueError("Passed a None connection context.")
         super().__init__()
-        self.ip = connection_ctx.ip
+        self.ip = connection_ctx.ip_addr
         self.port = connection_ctx.port
         self.cadence_ms = cadence_ms
         self.quitting = False
@@ -825,11 +966,15 @@ class NBAPI_Task(threading.Thread):
         if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
-            self.auth=(connection_ctx.auth.user, connection_ctx.auth.pw)
+            self.auth=(connection_ctx.auth.user, connection_ctx.auth.password)
     # Override threading.Thread.run(self)->None
     def run(self):
+        """
+        The method that will be executed when the thread is started.
+        It periodically retrieves the network topology using NBAPI.
+        """
         while not self.quitting:
-            url = "http://{}:{}/serviceElements/Device.WiFi.DataElements.".format(self.ip, self.port)
+            url = f"http://{self.ip}:{self.port}/serviceElements/Device.WiFi.DataElements."
 
             # DEBUG: Load previously dumped JSON response
             # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
@@ -847,8 +992,11 @@ class NBAPI_Task(threading.Thread):
                 g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
                 sleep(self.cadence_ms // 1000)
     def __repr__(self):
-        return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}, data_q elements: {len(self.data_q)}"
+        return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}"
     def quit(self):
+        """
+        Sets the quitting flag to True, signaling the thread to exit gracefully.
+        """
         logging.debug("Hey folks! NBAPI thread here. Time to die!")
         self.quitting = True
 
@@ -883,7 +1031,19 @@ def set_last_clicked_station(last_clicked_sta: Station) -> None:
     State('httpauth_user', 'value'),
     State('httpauth_pass', 'value')
 )
-def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, httpauth_pw: str):
+def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, httpauth_pw: str) -> str:
+    """Connect click callback. Starts an HTTP client thread pointing at ip:port
+
+    Args:
+        n_clicks (int): Clicked? If 0, do nothing.
+        ip (str): The IP address of the Controller to connect to.
+        port (str): The port of the controller to connect to.
+        httpauth_u (str): The HTTP Basic Auth username of the Controller's HTTP proxy.
+        httpauth_pw (str): The HTTP Basic Auth password of the Controller's HTTP proxy.
+
+    Returns:
+        str: A success or failure message sent to the UI.
+    """
     if not n_clicks:
         return ""
     logging.debug(f"Request to monitor controller at {ip}:{port}")
@@ -903,16 +1063,32 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
 
 @app.callback(Output('my-graph', 'figure'),
               Input('graph-interval', 'n_intervals'))
-def update_graph(unused):
+def update_graph(_):
+    """
+    Updates the contents of the 'my-graph' component based on a periodic timer.
+
+    Parameters:
+    ----------
+    _ : int
+        A dummy variable that is not used in the function.
+
+    Returns:
+    -------
+    Graph
+        A Plotly figure/graph representing the current topological state of the EasyMesh network.
+    """
     return network_graph(g_Topology)
 
-@app.callback(Output('transition_bssid', 'value'),
-              Input('transition-type-selection', 'value'))
-def on_transition_type_choice_click(_type):
-    return ""
-
 @app.callback(Output('easymesh_ssid', 'value'),Input('transition-interval', 'n_intervals'))
-def update_prplmesh_ssid(unused):
+def update_prplmesh_ssid(_):
+    """Grab the static network SSID.
+
+    Args:
+        _ (int): Unused
+
+    Returns:
+        str: The static SSID of the first radio in the network.
+    """
     return g_Topology.get_ssid()
 
 @app.callback(Output('vbss-creation-client-mac', 'options'),
@@ -928,7 +1104,16 @@ def update_stations(_):
               Output('transition_bssid', 'placeholder'),
               Input('transition-interval', 'n_intervals'),
               Input('transition-type-selection', 'value'))
-def update_transition_dropdown_menus(unused, _type):
+def update_transition_dropdown_menus(_, _type):
+    """Periodically update the available stations and BSSes for initiating a transition
+
+    Args:
+        _ (int): Unused
+        _type (str): The type of transition
+
+    Returns:
+        A 3-tuple:  Lists of options, ([Stations], [Target_radios], "Description String")
+    """
     placeholder = 'Select a new BSSID'
     avail_stations = [sta.get_mac() for sta in g_Topology.get_stations()]
     if _type is None or _type == 'Client Steering':
@@ -983,12 +1168,23 @@ def update_vbss_creation_ruid_dropdown(_):
     State('transition-type-selection', 'value'),
 )
 def on_transition_click(n_clicks: int, station: str, target_id: str, transition_type: str):
+    """Callback handling a begin transition button click
+
+    Args:
+        n_clicks (int): Clicked? If 0, do nothing
+        station (str): The station to initiate a move for
+        target_id (str): The target MAC, either a BSSID for 11v steering or a radio MAC for a VBSS move.
+        transition_type (str): The type of transition. Either 'VBSS', or 11v.
+
+    Returns:
+        _type_: _description_
+    """
     if not n_clicks:
-        return f"Click Transition to begin."
+        return "Click Transition to begin."
     if not station:
-        return f"Select a station."
+        return "Select a station."
     if not target_id:
-        return f"Select a new target."
+        return "Select a new target."
     if transition_type == 'VBSS':
         target_type = 'RUID'
         if not g_Topology.validate_vbss_move_request(station, target_id):
@@ -1003,6 +1199,22 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
 @app.callback(Output('node-click', 'children'),
               Input('my-graph', 'clickData'))
 def node_click(clickData):
+    """
+    Updates the contents of the 'node-click' component based on the clicked data of the 'my-graph' component.
+
+    Parameters:
+    ----------
+    clickData: dict
+        A dictionary containing the data of the clicked point on the 'my-graph' component.
+
+    Returns:
+    -------
+    str
+        The string representation of the clicked node's parameters, depending on whether it's an agent, station, or interface.
+        If there is no click data, it returns an empty string.
+        If the clicked point doesn't have a 'customdata' attribute, it returns "Node data not available".
+        If the clicked point is not found in any of the node types, it returns "None found!".
+    """
     if not clickData:
         return ""
     clicked_point = clickData['points'][0]
@@ -1113,7 +1325,7 @@ def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str)
         n_clicks (int): How many clicks? Binary, 1 or 0. If 0, just bail.
         should_disassociate (bool): If set, disassociate all clients prior to tearing down the BSS.
         bssid (str): The BSSID of the BSS to destroy.
-        
+
     Note: Canonically, the NBAPI method also takes a 'client_mac', but it is unused, so not parameterized in the UI.
     """
     if not n_clicks:
@@ -1126,7 +1338,15 @@ def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str)
     return f"Sent VBSS destruction request for '{bssid}'"
 
 
-def sta_has_moved(sta_mac: str) -> bool:
+def sta_has_undergone_vbss_move(sta_mac: str) -> bool:
+    """Reports whether or not a given station has undergone a VBSS move.
+
+    Args:
+        sta_mac (str): The station of interest.
+
+    Returns:
+        bool: True if the given station has undergone a VBSS move, False otherwise.
+    """
     ret = False
     if sta_mac in stations_have_moved:
         ret = True
@@ -1145,21 +1365,20 @@ def update_rssi_plot(n_intervals: int):
     Args:
         int (n_intervals): Number of times this callback has fired.
     """
-    global RSSI_RELATIVE_TO_RADIO
     station_of_interest = get_last_clicked_station()
     if not station_of_interest:
         # Log that there's no station selected once.
-        if (n_intervals == 0):
+        if n_intervals == 0:
             logging.debug("No station!")
         return dict()
     selected_sta_mac = station_of_interest.get_mac()
     # Store as a static variable so we can clear the RSSI table when a new station is selected.
-    if update_rssi_plot.last_sta == None:
+    if update_rssi_plot.last_sta is None:
         update_rssi_plot.last_sta = station_of_interest
     if update_rssi_plot.last_sta.get_mac() != selected_sta_mac:
         logging.debug(f"New station clicked ({selected_sta_mac}), resetting plot data")
         update_rssi_plot.last_sta = station_of_interest
-    
+
 
     fig = go.Figure()
 
@@ -1180,19 +1399,19 @@ def update_rssi_plot(n_intervals: int):
                 trace_name = f"STA {station_of_interest.params['Hostname']} ({selected_sta_mac}) relative to radio {ruid}"
                 trace = go.Scatter(x=x_axis_vals, y=y_axis_vals, marker=dict(color=unassoc_color_lut[ruid]), name=trace_name, mode="lines", hoverinfo="all")
                 fig.add_trace(trace)
-                if sta_has_moved(sta_mac):
-                    logging.debug(f"station has moved, drawing vertical marker.")
+                if sta_has_undergone_vbss_move(sta_mac):
+                    logging.debug(f"station {sta_mac} has moved, drawing vertical marker.")
                     if sta_mac not in g_Transition_X_Positions:
                         g_Transition_X_Positions[sta_mac] = []
                     pos = len(measurement_list) - 1
                     g_Transition_X_Positions[sta_mac].append(pos)
-                    trace_name = f"VBSS move for STA {sta_mac}" 
+                    trace_name = f"VBSS move for STA {sta_mac}"
 
     # Must render each VBSS move every render cycle to maintain VBSS move history in the plot.
     for station_mac, move_list in g_Transition_X_Positions.items():
         if station_mac == selected_sta_mac:
             for move_position in move_list:
-                logging.debug(f"move for STA {sta_mac} happened at {move_position}")
+                logging.debug(f"move for STA {station_mac} happened at {move_position}")
                 fig.add_vline(x=move_position, line_width=3, line_dash='dash', line_color='black')
     return fig
 # Init callback function attribute (static)

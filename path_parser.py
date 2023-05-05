@@ -1,5 +1,7 @@
 """Module for parsing NBAPI metadata"""
 
+# pylint: disable=line-too-long
+
 def __token_is_device(token: str):
     return token == "Device"
 
