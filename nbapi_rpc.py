@@ -2,6 +2,8 @@
 Module for doing RPC to the NBAPI over HTTP
 """
 
+# pylint: disable=line-too-long, logging-fstring-interpolation, import-error, too-many-arguments
+
 import logging
 import json
 import requests
@@ -10,6 +12,16 @@ from easymesh import BSS, Radio
 from controller_ctx import ControllerConnectionCtx
 
 def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json):
+    """
+    Sends an NBAPI command to the EasyMesh controller using the specified connection context.
+
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection context to use for the request.
+        command_payload (json): The payload of the NBAPI command to send.
+
+    Returns:
+        None
+    """
     url = f"http://{conn_ctx.ip}:{conn_ctx.port}/commands"
     logging.debug(f"Sending NBAPI command to {url}, payload={command_payload}")
     response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.pw), timeout=3, json=command_payload)
@@ -88,6 +100,20 @@ def send_vbss_destruction_request(conn_ctx: ControllerConnectionCtx, client_mac:
 
 
 def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str, new_bssid: str):
+    """
+    Sends a client steering request to the EasyMesh controller using the specified connection context.
+
+    Args:
+        conn_ctx (ControllerConnectionCtx): The connection context to use for the request.
+        sta_mac (str): The MAC address of the client station to steer.
+        new_bssid (str): The BSSID of the target AP to steer the client to.
+
+    Raises:
+        ValueError: If the `conn_ctx` argument is `None`.
+
+    Returns:
+        None
+    """
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
     # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
