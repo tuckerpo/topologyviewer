@@ -48,6 +48,7 @@ from nbapi_rpc import (send_client_steering_request, send_vbss_move_request,
 from controller_ctx import ControllerConnectionCtx
 from http_auth import HTTPBasicAuthParams
 from colors import ColorSync
+from render_state import AgentRenderState, EnumAgentRenderState
 
 app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
@@ -257,20 +258,27 @@ def get_color_for_agent(color_selector: ColorSync, agent: Agent) -> str:
     return color_selector.get_color_for_agent(agent_mac)
 
 g_ColorSync = ColorSync('green')
-# Agent MAC -> Shape type, for blinking.
-g_RenderState = {}
-def was_last_rendered_as_open_circle(agent: Agent) -> bool:
-    """Checks if a given Agent was last rendered as a solid or open-circle
+g_RenderState = AgentRenderState()
+
+def get_plotly_friendly_render_state_string(render_state: EnumAgentRenderState) -> str:
+    """
+    Return a string representing the Plotly-friendly render state of an agent, given its render
+    state. This function maps the EnumAgentRenderState enumeration to Plotly's marker symbols.
 
     Args:
-        agent (Agent): The Agent to check the last render state for.
+        render_state (EnumAgentRenderState): The render state of an agent.
 
     Returns:
-        bool: True if the given Agent was last rendered as an open-circle, False otherwise.
+        str: A string representing the Plotly-friendly render state of the agent, based on its
+        render state. Returns 'circle' if the render state is UNKNOWN, CLOSED, or SOLID.
+        Returns 'open-circle' if the render state is OPEN.
     """
-    if agent.get_id() in g_RenderState:
-        return g_RenderState[agent.get_id()] == 'circle-open'
-    return False
+    marker_symbol_string: str = ""
+    if render_state in (EnumAgentRenderState.UNKNOWN, EnumAgentRenderState.CLOSED, EnumAgentRenderState.SOLID):
+        marker_symbol_string = "circle"
+    elif render_state == EnumAgentRenderState.OPEN:
+        marker_symbol_string = "circle-open"
+    return marker_symbol_string
 
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
@@ -360,16 +368,8 @@ def network_graph(topology: Topology):
         shape_type = 'circle'
         if G.nodes[node]['type'] == NodeType.AGENT or G.nodes[node]['type'] == NodeType.CONTROLLER:
             agent = topology.get_agent_from_hash(node)
-            if len(agent.get_connected_stations()) == 0:
-                # No connected stations, don't blink.
-                shape_type = 'circle'
-            else:
-                if not was_last_rendered_as_open_circle(agent):
-                    shape_type = 'circle-open'
-                    g_RenderState[agent.get_id()] = shape_type
-                else:
-                    shape_type = 'circle'
-                    g_RenderState[agent.get_id()] = shape_type
+            g_RenderState.add_new_agent(agent)
+            shape_type = get_plotly_friendly_render_state_string(g_RenderState.get_state(agent))
         node_hover_text.append(gen_node_text(g_Topology, node, G.nodes[node]['type']))
         node_type = G.nodes[node]['type']
         if node_type == NodeType.CONTROLLER:
