@@ -83,4 +83,7 @@ class AgentRenderState():
             new_render_state = self.__get_initial_render_state(agent)
         elif previous_render_state == EnumAgentRenderState.SOLID:
             new_render_state = self.__get_initial_render_state(agent)
+        # Finally, check if there's been any station updates.
+        if len(agent.get_connected_stations()) == 0:
+            new_render_state = EnumAgentRenderState.SOLID
         self.agent_render_states[agent_id] = new_render_state
