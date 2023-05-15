@@ -23,6 +23,7 @@ Methods:
     knows_agent(agent_mac: str) -> bool: Checks if the specified agent is known to the `ColorSync` instance.
 """
 
+from typing import List
 
 class ColorSync:
     """
@@ -99,3 +100,11 @@ class ColorSync:
         - bool: `True` if the agent is known, `False` otherwise.
         """
         return agent_mac in self.agent_color_map
+
+    def get_color_list(self) -> List[str]:
+        """Gets this instances' color list.
+
+        Returns:
+            List[str]: The list of color strings that this color sync instance has.
+        """
+        return self.colors
