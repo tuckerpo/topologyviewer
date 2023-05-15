@@ -744,38 +744,35 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     if not isinstance(nbapi_json, list):
         return Topology({}, {})
 
-    # Don't try to be too clever, here - just do a bunch of passes over the json entries until we're done figuring things out.
+    agent_dict = {}
+    iface_dict = {}
 
-    # 0. Find the controller in the network.
     for e in nbapi_json:
+        # 0. Find the controller in the network.
         if re.search(r'\.Network\.$', e['path']):
             global g_controller_id
             g_controller_id = e['parameters']['ControllerID']
 
-    # 1. Build the agent list.
-    agent_list: List[Agent] = []
-    for e in nbapi_json:
+        # 1. Build the agent list.
         if re.search(r"\.Device\.\d{1,10}\.$", e['path']):
-            agent_list.append(Agent(e['path'], e['parameters']))
+            agent_dict[e['path']] = Agent(e['path'], e['parameters'])
 
 
-    # 2. Get Interfaces of each Agent
-    interface_list: List[Interface] = []
-    for e in nbapi_json:
+        # 2. Get Interfaces of each Agent
         if re.search(r"\.Interface\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 if e['path'].startswith(agent.path):
                     iface = Interface(e['path'], e['parameters'])
                     iface.set_parent_agent(agent)
                     agent.add_interface(iface)
-                    interface_list.append(iface)
+                    iface_dict[e['path']] = iface
+                    # interface_list.append(iface)
 
-    # 3. Get Neighbors of each Interface
-    controller_backhaul_interface = {}
-    controller_agent = {}
-    for e in nbapi_json:
+        # 3. Get Neighbors of each Interface
+        controller_backhaul_interface = {}
+        controller_agent = {}
         if re.search(r"\.Neighbor\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 for interface in agent.get_interfaces():
                     if e['path'].startswith(interface.path):
                         interface.add_neighbor(Neighbor(e['path'], e['parameters']))
@@ -786,20 +783,19 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             controller_backhaul_interface.orientation = ORIENTATION.DOWN
                             controller_agent = agent
 
-    # Controller has no neighbours yet, mark first ethernet interface as backhaul
-    if not controller_backhaul_interface:
-        for agent in agent_list:
-            if agent.get_id() == g_controller_id:
-                controller_agent = agent
-                for iface in agent.get_interfaces():
-                    if iface.params['MediaType']<=1:
-                        controller_backhaul_interface = iface
-                        controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                        break
+        # Controller has no neighbours yet, mark first ethernet interface as backhaul
+        if not controller_backhaul_interface:
+            for agent in agent_dict.values():
+                if agent.get_id() == g_controller_id:
+                    controller_agent = agent
+                    for iface in agent.get_interfaces():
+                        if iface.params['MediaType']<=1:
+                            controller_backhaul_interface = iface
+                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                            break
 
 
-    # 4. Link interfaces to parents
-    for e in nbapi_json:
+        # 4. Link interfaces to parents
         if re.search(r"\.MultiAPDevice\.Backhaul\.$", e['path']):
             if e['parameters']['LinkType'] == "None":
                 continue
@@ -807,7 +803,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             # Ethernet backhaul connections must always link to the controller
             if e['parameters']['LinkType'] == "Ethernet":
                 # Search for backhaul interface on the device that is getting processed
-                for iface in interface_list:
+                for iface in iface_dict.values():
                     # TODO PPM-2043: HACK: prplMesh doesn't report Parent/Child Relation of Agent with Wired Connection
                     # Instead, assume wired backhaul from agent(s) to controller on firt ethernet interface of agent.
                     if iface.get_interface_number() == "1":
@@ -821,9 +817,9 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
 
             elif e['parameters']['LinkType'] == "Wi-Fi":
-                for childIface in interface_list:
+                for childIface in iface_dict.values():
                     if childIface.params['MACAddress'] == e['parameters']['MACAddress']: # interface on device that is getting processed
-                        for parentIface in interface_list:
+                        for parentIface in iface_dict.values():
                             if parentIface.params['MACAddress'] == e['parameters']['BackhaulMACAddress']: # interface on parent device
                                 parentIface.add_child(childIface)
                                 parentIface.orientation = ORIENTATION.DOWN
@@ -831,34 +827,28 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                                 parentIface.get_parent_agent().add_child(childIface.get_parent_agent())
                                 break
 
-    # 5. Get Radios, add them to Agents
-    for e in nbapi_json:
+        # 5. Get Radios, add them to Agents
         if re.search(r"\.Radio\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 if e['path'].startswith(agent.path):
                     agent.add_radio(Radio(e['path'], e['parameters']))
 
-    # 6. Collect BSSs and map them back to radios and interfaces
-    for e in nbapi_json:
+        # 6. Collect BSSs and map them back to radios and interfaces
         if re.search(r"\.BSS\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 for radio in agent.get_radios():
                     if e['path'].startswith(radio.path):
                         bss = BSS(e['path'], e['parameters'])
                         radio.add_bss(bss)
-                        for iface in interface_list:
+                        for iface in iface_dict.values():
                             if radio.params['ID'] == iface.params['MACAddress']:
                                 bss.interface = iface
                                 break
-                            # if e['parameters']['BSSID'] == iface.params['MACAddress']:
-                            #    bss.interface = iface
-                            #    break
 
-    # 7. Map Stations to the BSS they're connected to.
-    station_list: List[Station] = []
-    for e in nbapi_json:
+        # 7. Map Stations to the BSS they're connected to.
+        station_list: List[Station] = []
         if re.search(r"\.STA\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 for radio in agent.get_radios():
                     for bss in radio.get_bsses():
                         if e['path'].startswith(bss.path):
@@ -871,7 +861,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             g_StationsToRadio[sta.get_mac()] = radio.get_ruid()
                             bss.interface.orientation = ORIENTATION.DOWN
                             # Exclude stations that are actually agents
-                            if not bss.interface.get_parent_agent().is_child(sta.get_mac()): #if not bss.interface.is_child(sta.get_mac()):
+                            if not bss.interface.get_parent_agent().is_child(sta.get_mac()):
                                 bss.interface.add_connected_station(sta)
                             # Append RSSI measurements.
                             if radio.get_ruid() not in g_RSSI_Measurements:
@@ -882,16 +872,14 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                                 else:
                                     g_RSSI_Measurements[radio.get_ruid()][sta.get_mac()].append(sta.get_rssi())
 
-    # 8. Check and set stations steering history
-    for e in nbapi_json:
+        # 8. Check and set stations steering history
         if re.search(r"\.SteerEvent\.\d{1,10}\.$", e['path']):
             for station in station_list:
                 if station.params["MACAddress"] == e["parameters"]["DeviceId"] and e["parameters"]["Result"] == "Success":
                     station.set_steered(True)
 
-    for e in nbapi_json:
         if re.search(r"\.UnassociatedSTA\.\d{1,10}\.$", e['path']):
-            for agent in agent_list:
+            for agent in agent_dict.values():
                 for radio in agent.get_radios():
                     if e['path'].startswith(radio.path):
                         unassoc_sta = UnassociatedStation(e['path'], e['parameters'])
@@ -904,31 +892,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                             else:
                                 g_RSSI_Measurements[radio.get_ruid()][unassoc_sta.get_mac()].append(e['parameters']['SignalStrength'])
 
-    # DEBUG
-    # for i, agent in enumerate(agent_list):
-    #     print(f"Agent_{i} ID {agent.get_id()}, {agent.num_radios()} radios.")
-    #     for n, radio in enumerate(agent.get_radios()):
-    #         print(f"\tRadio_{n} (belonging to device {agent.get_id()} has ruid {radio.get_ruid()}")
-    #         for m, bss in enumerate(radio.get_bsses()):
-    #             print(f"\t\tRadio (ruid: {radio.get_ruid()}) BSS_{m}: {bss.get_bssid()}")
-    #             for o, sta in enumerate(bss.get_connected_stations()):
-    #                 print(f"\t\t\tBSS {bss.get_bssid()} connected station: STA_{o}: {sta.get_mac()}")
-
-    #Connection tree debug
-    # def print_conns(agt: Agent):
-    #     for ifc in agt.get_interfaces():
-    #         for child in ifc.get_children():
-    #             if not child.get_children():
-    #                 print(f'{child.path.replace("Device.WiFi.DataElements.Network.","")} has backhaul: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
-    #         if ifc.get_connected_stations():
-    #             for sta in ifc.get_connected_stations():
-    #                 print(f'\tSTATION: {sta.get_mac()} is connected to: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
-
-    # for a in agent_list:
-    #     print_conns(a)
-
-    # 5. Go for a walk. Go feel the sun. Maybe read a book about recursion.
-    return Topology(agent_list, g_controller_id)
+    return Topology(list(agent_dict.values()), g_controller_id)
 
 g_ControllerConnectionCtx = None
 
