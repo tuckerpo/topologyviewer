@@ -37,6 +37,7 @@ import validation
 from topology import Topology
 from easymesh import Agent, Station
 from path_parser import parse_index_from_path_by_key
+from render_state import AgentRenderState, EnumAgentRenderState
 class TopologyParsingTests(unittest.TestCase):
     """
     Unit tests for the `marshall_nbapi_blob` function that converts JSON blobs obtained from the NBAPI into
@@ -165,6 +166,31 @@ class PathParserTests(unittest.TestCase):
         """Test that we can handle bad input
         """
         self.assertEqual(parse_index_from_path_by_key("Device.WiFi.", ""), "")
+
+class RenderStateTests(unittest.TestCase):
+    """Tests the AgentRenderState class from the render_state module.
+    """
+    def __init__(self, *args, **kwargs):
+        super(RenderStateTests, self).__init__(*args, **kwargs)
+        self.agent_mac = "aa:bb:cc:dd:ee:ff"
+    def test_no_stations_connected(self):
+        """Test that an Agent node is rendered as solid with no connected stations.
+        """
+        the_agent = Agent("path", {"ID": self.agent_mac})
+        agent_render_state_instance = AgentRenderState()
+        agent_render_state_instance.add_new_agent(the_agent)
+        self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.SOLID)
+    def test_stations_connected_initial_state(self):
+        """Test that an Agent node blinks if it has connected stations.
+        """
+        the_agent = Agent("path", {"ID": self.agent_mac})
+        the_station = Station("path", {})
+        the_agent.add_connected_station(the_station)
+        agent_render_state_instance = AgentRenderState()
+        agent_render_state_instance.add_new_agent(the_agent)
+        self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.OPEN)
+        self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.CLOSED)
+        self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.OPEN)
 
 if __name__ == '__main__':
     unittest.main()
