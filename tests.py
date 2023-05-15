@@ -38,6 +38,7 @@ from topology import Topology
 from easymesh import Agent, Station
 from path_parser import parse_index_from_path_by_key
 from render_state import AgentRenderState, EnumAgentRenderState
+from colors import ColorSync
 class TopologyParsingTests(unittest.TestCase):
     """
     Unit tests for the `marshall_nbapi_blob` function that converts JSON blobs obtained from the NBAPI into
@@ -191,6 +192,46 @@ class RenderStateTests(unittest.TestCase):
         self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.OPEN)
         self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.CLOSED)
         self.assertTrue(agent_render_state_instance.get_state(the_agent) == EnumAgentRenderState.OPEN)
+
+class ColorSyncTests(unittest.TestCase):
+    """Tests the color sync module.
+    """
+    def __init__(self, *args, **kwargs):
+        super(ColorSyncTests, self).__init__(*args, **kwargs)
+    def test_default_color_returned_on_unknown_agent(self):
+        """Ensure that the color sync module yields the default color if asked about an agent that
+        it is not yet aware of.
+        """
+        default_color = 'red'
+        color_sync = ColorSync(default_agent_color=default_color)
+        the_agent = Agent('testpath', {})
+        self.assertTrue(color_sync.get_color_for_agent(the_agent) == default_color)
+    def test_colors_modulo_length_color_list(self):
+        """Test that the color sync module assigns a unique color to every agent until it's color
+        list is exhausted, at which point it should wrap back to the 0th possible color.
+        """
+        color_sync = ColorSync(default_agent_color='black')
+        color_list = color_sync.get_color_list()
+        n_colors = len(color_list)
+        color_set = set()
+        for agent_idx in range(0, n_colors):
+            agent = Agent(f"agent_{agent_idx}", {"ID": str(agent_idx)})
+            color_sync.add_agent(agent)
+            color_set.add(color_sync.get_color_for_agent(agent))
+        # Test that the whole color list was exhausted and each agent was given a unique color.
+        self.assertTrue(len(color_set) == n_colors)
+        # Then, add one more and ensure that the color wraps modulo length of the list.
+        agent = Agent("LastAgent", {"ID": "topologyviewer"})
+        color_sync.add_agent(agent)
+        self.assertTrue(color_sync.get_color_for_agent(agent) == color_list[0])
+    def test_knows_agent(self):
+        """Test that the color sync module is aware of unique agents.
+        """
+        color_sync = ColorSync('black')
+        for agent_idx in range(len(color_sync.get_color_list())):
+            agent = Agent(f"agent_{agent_idx}", {"ID": str(agent_idx)})
+            color_sync.add_agent(agent)
+            self.assertTrue(color_sync.knows_agent(agent))
 
 if __name__ == '__main__':
     unittest.main()
