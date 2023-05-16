@@ -24,24 +24,19 @@ python my_easy_mesh_app.py
 
 import json
 import logging
-import re
-import threading
 from enum import Enum
 from textwrap import dedent as d
-from time import sleep
-from typing import List
 
 import networkx as nx
 import plotly.graph_objs as go
-import requests
 from dash import Dash, Input, Output, State, dcc, html
 import dash_daq as daq
 from networkx.drawing.nx_pydot import graphviz_layout
 from PIL import Image
 
 import validation
-from easymesh import (BSS, ORIENTATION, Agent, Interface, Neighbor, Radio,
-                      Station, UnassociatedStation)
+from easymesh import (ORIENTATION, Agent, Interface,
+                      Station)
 from topology import Topology
 from nbapi_rpc import (send_client_steering_request, send_vbss_move_request,
                     send_vbss_creation_request, send_vbss_destruction_request)
@@ -49,11 +44,14 @@ from controller_ctx import ControllerConnectionCtx
 from http_auth import HTTPBasicAuthParams
 from colors import ColorSync
 from render_state import AgentRenderState, EnumAgentRenderState
+from nbapi import NBAPITask
+from nbapi_persistent import get_did_station_move, get_rssi_measurements
 
 app = Dash(__name__)
 app.title = 'CableLabs EasyMesh Network Monitor'
 
 g_StationsToRadio = {}
+nbapi_thread: NBAPITask = None
 class NodeType(Enum):
     """Enum representation of different node types in an EasyMesh network.
     """
@@ -280,6 +278,20 @@ def get_plotly_friendly_render_state_string(render_state: EnumAgentRenderState) 
         marker_symbol_string = "circle-open"
     return marker_symbol_string
 
+def get_topology() -> Topology:
+    """Front-end call for getting a topology.
+    For various reasons, the global topology instance for the current connection may not yet be
+    available (not yet deserialized, NBAPI thread is not running, etc).
+
+    In that case, we still want to emit a default topology object so the UI can continue rendering.
+
+    Returns:
+        Topology: A default dummy topology, or a real topology representing the network if available.
+    """
+    if nbapi_thread is None or nbapi_thread.get_topology() is None:
+        return Topology({}, "")
+    return nbapi_thread.get_topology()
+
 # Create topology graph of known easymesh entities.
 # Nodes indexed via MAC, since that's effectively a uuid, or a unique  graph key.
 def network_graph(topology: Topology):
@@ -342,12 +354,12 @@ def network_graph(topology: Topology):
     for node in G.nodes:
         G.nodes[node]['pos'] = list(pos[node])
         x, y = G.nodes[node]['pos']
-        agent = g_Topology.get_agent_from_hash(node)
+        agent = get_topology().get_agent_from_hash(node)
         if agent:
             agent.x = x
             agent.y = y
         else:
-            station = g_Topology.get_station_from_hash(node)
+            station = get_topology().get_station_from_hash(node)
             if station:
                 station.x = x
                 station.y = y
@@ -370,7 +382,7 @@ def network_graph(topology: Topology):
             agent = topology.get_agent_from_hash(node)
             g_RenderState.add_new_agent(agent)
             shape_type = get_plotly_friendly_render_state_string(g_RenderState.get_state(agent))
-        node_hover_text.append(gen_node_text(g_Topology, node, G.nodes[node]['type']))
+        node_hover_text.append(gen_node_text(get_topology(), node, G.nodes[node]['type']))
         node_type = G.nodes[node]['type']
         if node_type == NodeType.CONTROLLER:
             agent = topology.get_agent_from_hash(node)
@@ -450,7 +462,7 @@ def network_graph(topology: Topology):
     node_symbols = []
 
     # Add graph data
-    for a in g_Topology.get_agents():
+    for a in get_topology().get_agents():
         a.sort_interfaces()
         o = get_iface_markers(a)
         if not o['x']:
@@ -574,9 +586,6 @@ styles = {
         'overflowX': 'scroll'
     }
 }
-# EasyMesh entities
-g_Topology = Topology({},"")
-g_controller_id = ""
 
 # HTML Layout / Components
 app.layout = html.Div([
@@ -658,7 +667,7 @@ app.layout = html.Div([
                     html.Div(
                         className="twelve columns",
                         children=[dcc.Graph(id="my-graph",
-                                            figure=network_graph(g_Topology), animate=True, config={'displayModeBar': True}),
+                                            figure=network_graph(get_topology()), animate=True, config={'displayModeBar': True}),
                                 dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
                         style={'height': '800px'}
                     ),
@@ -713,258 +722,8 @@ app.layout = html.Div([
 g_RSSI_Measurements = {}
 
 stations_have_moved = []
-def handle_station_moved(sta: Station, radio: Radio) -> None:
-    """
-    The function `handle_station_moved` takes a `Station` object `sta` and a `Radio` object `radio` as input parameters. It logs a debug message indicating that the station has moved from its previous radio to the new radio. It then appends the MAC address of the station to a list called `stations_have_moved`.
-
-    Args:
-    - sta: A `Station` object representing the station that has moved.
-    - radio: A `Radio` object representing the radio to which the station has moved.
-
-    Returns:
-    - None. The function only logs a debug message and appends the MAC address of the moved station to the `stations_have_moved` list.
-    """
-    logging.debug(f"Station {sta.get_mac()} has moved! From {g_StationsToRadio[sta.get_mac()]} to {radio.get_ruid()}")
-    stations_have_moved.append(sta.get_mac())
-
-def marshall_nbapi_blob(nbapi_json) -> Topology:
-    """Parse a list of NBAPI json entries
-
-    Args:
-        nbapi_json (json): NBAPI json response.
-
-    Returns:
-        Topology: Topological representation of the parsed data.
-
-    Note:
-        This is pretty fragile, and depends on the NBAPI<->HTTP proxy interface not changing.
-    """
-    # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
-    # and their connected stations.
-    if not isinstance(nbapi_json, list):
-        return Topology({}, {})
-
-    agent_dict = {}
-    iface_dict = {}
-
-    for e in nbapi_json:
-        # 0. Find the controller in the network.
-        if re.search(r'\.Network\.$', e['path']):
-            global g_controller_id
-            g_controller_id = e['parameters']['ControllerID']
-
-        # 1. Build the agent list.
-        if re.search(r"\.Device\.\d{1,10}\.$", e['path']):
-            agent_dict[e['path']] = Agent(e['path'], e['parameters'])
-
-
-        # 2. Get Interfaces of each Agent
-        if re.search(r"\.Interface\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                if e['path'].startswith(agent.path):
-                    iface = Interface(e['path'], e['parameters'])
-                    iface.set_parent_agent(agent)
-                    agent.add_interface(iface)
-                    iface_dict[e['path']] = iface
-                    # interface_list.append(iface)
-
-        # 3. Get Neighbors of each Interface
-        controller_backhaul_interface = {}
-        controller_agent = {}
-        if re.search(r"\.Neighbor\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                for interface in agent.get_interfaces():
-                    if e['path'].startswith(interface.path):
-                        interface.add_neighbor(Neighbor(e['path'], e['parameters']))
-
-                        # Mark the backhaul interface of the controller: should be Ethernet type and have at least 1 neighbor
-                        if (agent.get_id() == g_controller_id) and (interface.params['MediaType']<=1):
-                            controller_backhaul_interface = interface
-                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                            controller_agent = agent
-
-        # Controller has no neighbours yet, mark first ethernet interface as backhaul
-        if not controller_backhaul_interface:
-            for agent in agent_dict.values():
-                if agent.get_id() == g_controller_id:
-                    controller_agent = agent
-                    for iface in agent.get_interfaces():
-                        if iface.params['MediaType']<=1:
-                            controller_backhaul_interface = iface
-                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                            break
-
-
-        # 4. Link interfaces to parents
-        if re.search(r"\.MultiAPDevice\.Backhaul\.$", e['path']):
-            if e['parameters']['LinkType'] == "None":
-                continue
-
-            # Ethernet backhaul connections must always link to the controller
-            if e['parameters']['LinkType'] == "Ethernet":
-                # Search for backhaul interface on the device that is getting processed
-                for iface in iface_dict.values():
-                    # TODO PPM-2043: HACK: prplMesh doesn't report Parent/Child Relation of Agent with Wired Connection
-                    # Instead, assume wired backhaul from agent(s) to controller on firt ethernet interface of agent.
-                    if iface.get_interface_number() == "1":
-                        if iface.get_mac() == controller_backhaul_interface.get_mac():
-                            continue
-                        if not controller_backhaul_interface.has_child_iface(iface.get_mac()):
-                            logging.debug(f"adding interface {iface.get_mac()} as child of controller's eth interface {controller_backhaul_interface.get_mac()}")
-                            controller_backhaul_interface.add_child(iface)
-                            iface.orientation = ORIENTATION.UP
-                            controller_agent.add_child(iface.get_parent_agent())
-
-
-            elif e['parameters']['LinkType'] == "Wi-Fi":
-                for childIface in iface_dict.values():
-                    if childIface.params['MACAddress'] == e['parameters']['MACAddress']: # interface on device that is getting processed
-                        for parentIface in iface_dict.values():
-                            if parentIface.params['MACAddress'] == e['parameters']['BackhaulMACAddress']: # interface on parent device
-                                parentIface.add_child(childIface)
-                                parentIface.orientation = ORIENTATION.DOWN
-                                childIface.orientation = ORIENTATION.UP
-                                parentIface.get_parent_agent().add_child(childIface.get_parent_agent())
-                                break
-
-        # 5. Get Radios, add them to Agents
-        if re.search(r"\.Radio\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                if e['path'].startswith(agent.path):
-                    agent.add_radio(Radio(e['path'], e['parameters']))
-
-        # 6. Collect BSSs and map them back to radios and interfaces
-        if re.search(r"\.BSS\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                for radio in agent.get_radios():
-                    if e['path'].startswith(radio.path):
-                        bss = BSS(e['path'], e['parameters'])
-                        radio.add_bss(bss)
-                        for iface in iface_dict.values():
-                            if radio.params['ID'] == iface.params['MACAddress']:
-                                bss.interface = iface
-                                break
-
-        # 7. Map Stations to the BSS they're connected to.
-        station_list: List[Station] = []
-        if re.search(r"\.STA\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                for radio in agent.get_radios():
-                    for bss in radio.get_bsses():
-                        if e['path'].startswith(bss.path):
-                            sta = Station(e['path'], e['parameters'])
-                            station_list.append(sta)
-                            bss.add_connected_station(sta)
-                            if sta.get_mac() in g_StationsToRadio and g_StationsToRadio[sta.get_mac()] != radio.get_ruid():
-                                handle_station_moved(sta, radio)
-                                del g_StationsToRadio[sta.get_mac()]
-                            g_StationsToRadio[sta.get_mac()] = radio.get_ruid()
-                            bss.interface.orientation = ORIENTATION.DOWN
-                            # Exclude stations that are actually agents
-                            if not bss.interface.get_parent_agent().is_child(sta.get_mac()):
-                                bss.interface.add_connected_station(sta)
-                            # Append RSSI measurements.
-                            if radio.get_ruid() not in g_RSSI_Measurements:
-                                g_RSSI_Measurements[radio.get_ruid()] = {}
-                            else:
-                                if sta.get_mac() not in g_RSSI_Measurements[radio.get_ruid()]:
-                                    g_RSSI_Measurements[radio.get_ruid()][sta.get_mac()] = []
-                                else:
-                                    g_RSSI_Measurements[radio.get_ruid()][sta.get_mac()].append(sta.get_rssi())
-
-        # 8. Check and set stations steering history
-        if re.search(r"\.SteerEvent\.\d{1,10}\.$", e['path']):
-            for station in station_list:
-                if station.params["MACAddress"] == e["parameters"]["DeviceId"] and e["parameters"]["Result"] == "Success":
-                    station.set_steered(True)
-
-        if re.search(r"\.UnassociatedSTA\.\d{1,10}\.$", e['path']):
-            for agent in agent_dict.values():
-                for radio in agent.get_radios():
-                    if e['path'].startswith(radio.path):
-                        unassoc_sta = UnassociatedStation(e['path'], e['parameters'])
-                        unassoc_sta.set_parent_radio(radio)
-                        if radio.get_ruid() not in g_RSSI_Measurements:
-                            g_RSSI_Measurements[radio.get_ruid()] = {}
-                        else:
-                            if unassoc_sta.get_mac() not in g_RSSI_Measurements[radio.get_ruid()]:
-                                g_RSSI_Measurements[radio.get_ruid()][unassoc_sta.get_mac()] = []
-                            else:
-                                g_RSSI_Measurements[radio.get_ruid()][unassoc_sta.get_mac()].append(e['parameters']['SignalStrength'])
-
-    return Topology(list(agent_dict.values()), g_controller_id)
 
 g_ControllerConnectionCtx = None
-
-class NBAPI_Task(threading.Thread):
-    """
-    A class for a worker thread that periodically retrieves the network topology using NBAPI.
-
-    Attributes:
-        connection_ctx (ControllerConnectionCtx): The controller connection context object.
-        cadence_ms (int): The cadence in milliseconds between topology retrievals.
-
-    Raises:
-        ValueError: If a None connection context is passed to the constructor.
-
-    Methods:
-        run(self) -> None:
-            The method that will be executed when the thread is started.
-            It periodically retrieves the network topology using NBAPI.
-        __repr__(self) -> str:
-            Returns a string representation of the NBAPI_Task object.
-        quit(self) -> None:
-            Sets the quitting flag to True, signaling the thread to exit gracefully.
-    """
-    def __init__(self, connection_ctx: ControllerConnectionCtx, cadence_ms: int = 1000):
-        if not connection_ctx:
-            raise ValueError("Passed a None connection context.")
-        super().__init__()
-        self.ip = connection_ctx.ip_addr
-        self.port = connection_ctx.port
-        self.cadence_ms = cadence_ms
-        self.quitting = False
-        self.heartbeat_count = 0
-        self.connection_timeout_seconds = 3
-        self.read_timeout_seconds = 10
-        if not connection_ctx.auth:
-            self.auth=('admin', 'admin')
-        else:
-            self.auth=(connection_ctx.auth.user, connection_ctx.auth.password)
-    # Override threading.Thread.run(self)->None
-    def run(self):
-        """
-        The method that will be executed when the thread is started.
-        It periodically retrieves the network topology using NBAPI.
-        """
-        while not self.quitting:
-            url = f"http://{self.ip}:{self.port}/serviceElements/Device.WiFi.DataElements."
-
-            # DEBUG: Load previously dumped JSON response
-            # with open("Datamodel_JSON_dumps/test_dump.json", 'r') as f:
-            #     nbapi_root_json_blob = json.loads(f.read())
-            logging.debug(f"Ping -> {self.ip}:{self.port} #{self.heartbeat_count}")
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
-            if not nbapi_root_request_response.ok:
-                logging.error(f"{self.ip}:{self.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
-                # break
-            else:
-                logging.debug(f"Pong <- {self.ip}:{self.port} #{self.heartbeat_count}")
-                self.heartbeat_count = self.heartbeat_count + 1
-                nbapi_root_json_blob = nbapi_root_request_response.json()
-                global g_Topology
-                g_Topology = marshall_nbapi_blob(nbapi_root_json_blob)
-                sleep(self.cadence_ms // 1000)
-    def __repr__(self):
-        return f"NBAPI_Task: ip: {self.ip}, port: {self.port}, cadence (mS): {self.cadence_ms}"
-    def quit(self):
-        """
-        Sets the quitting flag to True, signaling the thread to exit gracefully.
-        """
-        logging.debug("Hey folks! NBAPI thread here. Time to die!")
-        self.quitting = True
-
-nbapi_thread = None
 
 '''
 For keeping track of the last clicked station, for the RSSI plotting.
@@ -1021,7 +780,7 @@ def connect_to_controller(n_clicks: int, ip: str, port: str, httpauth_u: str, ht
     logging.debug(f"Starting NBAPI task at {ip}:{port}")
     global g_ControllerConnectionCtx
     g_ControllerConnectionCtx = ControllerConnectionCtx(ip, port, HTTPBasicAuthParams(httpauth_u, httpauth_pw))
-    nbapi_thread = NBAPI_Task(g_ControllerConnectionCtx, cadence_ms=2000)
+    nbapi_thread = NBAPITask(g_ControllerConnectionCtx, cadence_ms=2000)
     nbapi_thread.start()
     return f"Connected to {ip}:{port}"
 
@@ -1041,7 +800,7 @@ def update_graph(_):
     Graph
         A Plotly figure/graph representing the current topological state of the EasyMesh network.
     """
-    return network_graph(g_Topology)
+    return network_graph(get_topology())
 
 @app.callback(Output('easymesh_ssid', 'value'),Input('transition-interval', 'n_intervals'))
 def update_prplmesh_ssid(_):
@@ -1053,7 +812,7 @@ def update_prplmesh_ssid(_):
     Returns:
         str: The static SSID of the first radio in the network.
     """
-    return g_Topology.get_ssid()
+    return get_topology().get_ssid()
 
 @app.callback(Output('vbss-creation-client-mac', 'options'),
               Input('vbss-creation-interval', 'n_intervals')
@@ -1061,7 +820,7 @@ def update_prplmesh_ssid(_):
 def update_stations(_):
     """Populates the available station list for the client MAC field of a VBSS creation request.
     """
-    return [sta.get_mac() for sta in g_Topology.get_stations()]
+    return [sta.get_mac() for sta in get_topology().get_stations()]
 
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
@@ -1079,11 +838,11 @@ def update_transition_dropdown_menus(_, _type):
         A 3-tuple:  Lists of options, ([Stations], [Target_radios], "Description String")
     """
     placeholder = 'Select a new BSSID'
-    avail_stations = [sta.get_mac() for sta in g_Topology.get_stations()]
+    avail_stations = [sta.get_mac() for sta in get_topology().get_stations()]
     if _type is None or _type == 'Client Steering':
-        avail_targets = [bss.get_bssid() for bss in g_Topology.get_bsses()]
+        avail_targets = [bss.get_bssid() for bss in get_topology().get_bsses()]
     elif _type == 'VBSS':
-        avail_targets = [radio.get_ruid() for radio in g_Topology.get_radios()]
+        avail_targets = [radio.get_ruid() for radio in get_topology().get_radios()]
         placeholder = 'Select a new RUID'
     return (avail_stations, avail_targets, placeholder)
 
@@ -1093,7 +852,7 @@ def update_transition_dropdown_menus(_, _type):
 def update_vbss_move_client_mac(_):
     """Populate the client MAC dropdown for VBSS moves.
     """
-    return [sta.get_mac() for sta in g_Topology.get_stations()]
+    return [sta.get_mac() for sta in get_topology().get_stations()]
 
 @app.callback(Output('vbss-destruction-bssid', 'options'),
               Input('vbss-move-interval', 'n_intervals')
@@ -1104,9 +863,9 @@ def update_vbss_destruction_bssid_dropdown(_):
 
     # TODO: the below commented-out code should be the only code in this function.
     # Currently, prplMesh does not populate the 'IsVBSS' field correctly for virtual BSSes.
-    # return [bss.get_bssid() for bss in g_Topology.get_bsses() if bss.is_vbss()]
+    # return [bss.get_bssid() for bss in get_topology().get_bsses() if bss.is_vbss()]
 
-    return [bss.get_bssid() for bss in g_Topology.get_bsses()]
+    return [bss.get_bssid() for bss in get_topology().get_bsses()]
 
 @app.callback(Output('vbss-move-dest-ruid', 'options'),
               Input('vbss-move-interval', 'n_intervals')
@@ -1114,7 +873,7 @@ def update_vbss_destruction_bssid_dropdown(_):
 def update_vbss_move_ruid_dropdown(_):
     """Populate the destination RUID dropdown for VBSS moves.
     """
-    return [radio.get_ruid() for radio in g_Topology.get_radios()]
+    return [radio.get_ruid() for radio in get_topology().get_radios()]
 
 @app.callback(Output('vbss-creation-ruid', 'options'),
               Input('vbss-creation-interval', 'n_intervals')
@@ -1122,7 +881,7 @@ def update_vbss_move_ruid_dropdown(_):
 def update_vbss_creation_ruid_dropdown(_):
     """Populates the RUID dropdown field for creating a VBSS.
     """
-    return [radio.get_ruid() for radio in g_Topology.get_radios()]
+    return [radio.get_ruid() for radio in get_topology().get_radios()]
 
 @app.callback(
     Output('transition-output', 'children'),
@@ -1151,7 +910,7 @@ def on_transition_click(n_clicks: int, station: str, target_id: str, transition_
         return "Select a new target."
     if transition_type == 'VBSS':
         target_type = 'RUID'
-        if not g_Topology.validate_vbss_move_request(station, target_id):
+        if not get_topology().validate_vbss_move_request(station, target_id):
             return f"Station {station} is already connected to {target_id}"
     else:
         target_type = 'BSSID'
@@ -1185,17 +944,17 @@ def node_click(clickData):
     if 'customdata' not in clicked_point:
         return "Node data not available"
     node_hash = clicked_point['customdata']
-    agent = g_Topology.get_agent_from_hash(node_hash)
+    agent = get_topology().get_agent_from_hash(node_hash)
     if agent:
         return json.dumps(agent.params, indent=2)
 
-    sta = g_Topology.get_station_from_hash(node_hash)
+    sta = get_topology().get_station_from_hash(node_hash)
     if sta:
         logging.debug("Station clicked!")
         set_last_clicked_station(sta)
         return json.dumps(sta.params, indent=2)
 
-    interface = g_Topology.get_interface_from_hash(node_hash)
+    interface = get_topology().get_interface_from_hash(node_hash)
     if interface:
         return json.dumps(interface.params, indent=2)
     return "None found!"
@@ -1223,8 +982,8 @@ def vbss_move_callback(n_clicks: int, ssid: str, password: str, dest_ruid: str, 
     password_ok, password_error = validation.validate_vbss_password_for_creation(password)
     if not password_ok:
         return password_error
-    bssid = g_Topology.get_bssid_connection_for_sta(client_mac)
-    bss = g_Topology.get_bss_by_bssid(bssid)
+    bssid = get_topology().get_bssid_connection_for_sta(client_mac)
+    bss = get_topology().get_bss_by_bssid(bssid)
     send_vbss_move_request(g_ControllerConnectionCtx, client_mac, dest_ruid, ssid, password, bss)
     return "Sent VBSS move request"
 
@@ -1264,13 +1023,13 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
     is_password_valid, password_error = validation.validate_vbss_password_for_creation(password)
     if not is_password_valid:
         return f"Invalid password: {password_error}"
-    is_client_mac_valid, client_mac_error = validation.validate_vbss_client_mac(client_mac, g_Topology)
+    is_client_mac_valid, client_mac_error = validation.validate_vbss_client_mac(client_mac, get_topology())
     if not is_client_mac_valid:
         return f"Client MAC invalid: {client_mac_error}"
-    is_vbssid_valid, vbssid_error = validation.validate_vbss_vbssid(vbssid, g_Topology)
+    is_vbssid_valid, vbssid_error = validation.validate_vbss_vbssid(vbssid, get_topology())
     if not is_vbssid_valid:
         return f"VBSSID invalid: {vbssid_error}"
-    radio = g_Topology.get_radio_by_ruid(ruid)
+    radio = get_topology().get_radio_by_ruid(ruid)
     if radio is None:
         return "Radio is unknown"
     send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, radio)
@@ -1294,28 +1053,13 @@ def vbss_destruction_click(n_clicks: int, should_disassociate: bool, bssid: str)
     """
     if not n_clicks:
         return ""
-    bss = g_Topology.get_bss_by_bssid(bssid)
+    bss = get_topology().get_bss_by_bssid(bssid)
     if not bss:
         return f"Could not find a BSS for BSSID '{bssid}'"
     dummy_client_mac_addr = "aa:bb:cc:dd:ee:ff"
     send_vbss_destruction_request(g_ControllerConnectionCtx, dummy_client_mac_addr, should_disassociate, bss)
     return f"Sent VBSS destruction request for '{bssid}'"
 
-
-def sta_has_undergone_vbss_move(sta_mac: str) -> bool:
-    """Reports whether or not a given station has undergone a VBSS move.
-
-    Args:
-        sta_mac (str): The station of interest.
-
-    Returns:
-        bool: True if the given station has undergone a VBSS move, False otherwise.
-    """
-    ret = False
-    if sta_mac in stations_have_moved:
-        ret = True
-        stations_have_moved.remove(sta_mac)
-    return ret
 
 #  station -> list of moves
 g_Transition_X_Positions = {}
@@ -1347,14 +1091,14 @@ def update_rssi_plot(n_intervals: int):
     fig = go.Figure()
 
     unassoc_color_lut = {}
-    for key in g_RSSI_Measurements.items():
+    for key in get_rssi_measurements().items():
         radio_mac = key[0]
-        agent = g_Topology.get_agent_by_ruid(radio_mac)
+        agent = get_topology().get_agent_by_ruid(radio_mac)
         unassoc_color_lut[radio_mac] = get_color_for_agent(g_ColorSync, agent)
 
     # We need to render curves starting at the most recent move, instead of t=0
     initial_x_offset = 0
-    for ruid, sta_list in g_RSSI_Measurements.items():
+    for ruid, sta_list in get_rssi_measurements().items():
         for sta_mac, measurement_list in sta_list.items():
             if sta_mac == selected_sta_mac:
                 y_axis_vals = measurement_list
@@ -1363,7 +1107,7 @@ def update_rssi_plot(n_intervals: int):
                 trace_name = f"STA {station_of_interest.params['Hostname']} ({selected_sta_mac}) relative to radio {ruid}"
                 trace = go.Scatter(x=x_axis_vals, y=y_axis_vals, marker=dict(color=unassoc_color_lut[ruid]), name=trace_name, mode="lines", hoverinfo="all")
                 fig.add_trace(trace)
-                if sta_has_undergone_vbss_move(sta_mac):
+                if get_did_station_move(sta_mac):
                     logging.debug(f"station {sta_mac} has moved, drawing vertical marker.")
                     if sta_mac not in g_Transition_X_Positions:
                         g_Transition_X_Positions[sta_mac] = []
@@ -1375,7 +1119,6 @@ def update_rssi_plot(n_intervals: int):
     for station_mac, move_list in g_Transition_X_Positions.items():
         if station_mac == selected_sta_mac:
             for move_position in move_list:
-                logging.debug(f"move for STA {station_mac} happened at {move_position}")
                 fig.add_vline(x=move_position, line_width=3, line_dash='dash', line_color='black')
     return fig
 # Init callback function attribute (static)
