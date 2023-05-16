@@ -32,7 +32,7 @@ This module can be run as a script to execute all unit tests using the `unittest
 
 import unittest
 import json
-from main import marshall_nbapi_blob
+from nbapi import marshall_nbapi_blob
 import validation
 from topology import Topology
 from easymesh import Agent, Station
