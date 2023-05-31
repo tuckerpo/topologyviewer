@@ -250,6 +250,8 @@ def get_color_for_agent(color_selector: ColorSync, agent: Agent) -> str:
     Returns:
         str: The string representation of the color to be used for rendering (e.g. 'purple')
     """
+    if not agent:
+        return color_selector.get_color_list()[0]
     agent_mac = agent.get_id()
     if not color_selector.knows_agent(agent_mac):
         color_selector.add_agent(agent_mac)
