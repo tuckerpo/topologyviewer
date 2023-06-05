@@ -217,13 +217,17 @@ def network_graph(topology: Topology):
             node_symbols.append('circle')
             node_colors.append('green')
             if topology.get_agent_from_hash(node).params["ManufacturerModel"] == "Ubuntu": # RDKB
-                node_labels.append("  prplMesh Agent on RDK-B<br>  (Turris-Omnia)")
+                node_labels.append("  prplMesh Agent on RDK-B<br> (CGR)")
             elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "X5042": # ARRIS/ COMMSCOPE 3ʳᵈ
                 node_labels.append("  3ʳᵈ party EasyMesh Agent on 3ʳᵈ party OS<br>  (Commscope/ARRIS X5)")
             elif topology.get_agent_from_hash(node).params["Manufacturer"] == "Sagemcom": # prplMesh on Sagemcomm extender
                 node_labels.append("  prplMesh Agent on SWAN OS<br>  (Sagemcom Extender)")
             elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "GL.iNet GL-B1300": # prplMesh on GL-inet
                 node_labels.append("  prplMesh Agent on prplOS<br>  (GL.iNet B1300)")
+            elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "WNC LVRP": # prplMesh on GL-inet
+                node_labels.append("  prplMesh Agent on prplOS<br>  (WNC Haze)")
+            
+            #
             else:
                 node_labels.append(" unknown EasyMesh Agent")
 
@@ -425,8 +429,8 @@ app.layout = html.Div([
 
                             Input the IP and Port of the Controller in the EasyMesh network to visualize.
                             """)),
-                            dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value='192.168.250.171'),
-                            dcc.Input(id="port_input", type="text", placeholder="8080", value='8080'),
+                            dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value='192.168.250.10'),
+                            dcc.Input(id="port_input", type="text", placeholder="8080", value='80'),
                             html.Br(),
                             html.Br(),
                             dcc.Markdown(d("""
@@ -505,6 +509,16 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     Note:
         This is pretty fragile, and depends on the NBAPI<->HTTP proxy interface not changing.
     """
+
+
+    # import json
+    # import sys
+    # # Opening JSON file
+    # f = open('/home/yuce/Nextcloud/workspace/prpl/deplymentNotes/testDatamodels/CougarTestDevice.WiFi.DataElements.json')
+    
+    # nbapi_json = json.load(f)
+
+
     # For a topology demo, we really only care about Devices that hold active BSSs (aka Agents)
     # and their connected stations.
     if type(nbapi_json) is not list:
@@ -522,6 +536,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     agent_list: List[Agent] = []
     for e in nbapi_json:
         if re.search(r"\.Device\.\d{1,10}\.$", e['path']):
+            print("--agent add:%s"%e['path'])
             agent_list.append(Agent(e['path'], e['parameters']))
 
 
@@ -529,12 +544,14 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
     interface_list: List[Interface] = []
     for e in nbapi_json:
         if re.search(r"\.Interface\.\d{1,10}\.$", e['path']):
+            # print("--interface:%s"%e['path'])
             for agent in agent_list:
                 if e['path'].startswith(agent.path):
                     iface = Interface(e['path'], e['parameters'])
                     iface.set_parent_agent(agent)
                     agent.add_interface(iface)
                     interface_list.append(iface)
+                    print("--add interface:%s to agent:%s mac:%s"%(e['path'], agent.path, iface.params['MACAddress']))
 
     # 3. Get Neighbors of each Interface
     controller_backhaul_interface = {}
@@ -569,16 +586,26 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
         if re.search(r"\.MultiAPDevice\.Backhaul\.$", e['path']):
             if e['parameters']['LinkType'] == "None":
                 continue
+            
+            #7777 Cougar run fix
+            if "00:50:f1:a1:01:a3" in e['parameters']['MACAddress']:
+                e['parameters']['MACAddress'] = "00:50:f1:21:01:a3"
+
+            if "6e:63:9c:21:d2:01" in e['parameters']['MACAddress']:
+                e['parameters']['MACAddress'] = "6c:63:9c:21:d2:00"
 
             # Ethernet backhaul connections must always link to the controller
             if e['parameters']['LinkType'] == "Ethernet": 
                 # Search for backhaul interface on the device that is getting processed
+                iface_found = False
                 for iface in interface_list:
                     if iface.params['MACAddress'] == e['parameters']['MACAddress']:
                         controller_backhaul_interface.add_child(iface)
                         iface.orientation = ORIENTATION.UP
                         controller_agent.add_child(iface.get_parent_agent())
-
+                        iface_found = True
+                
+                    
 
             elif e['parameters']['LinkType'] == "Wi-Fi": 
                 for childIface in interface_list:
@@ -597,23 +624,157 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             for agent in agent_list:
                 if e['path'].startswith(agent.path):
                     agent.add_radio(Radio(e['path'], e['parameters']))
+                    print("--add radio:%s mac:%s"%(e['path'], e['parameters']['ID']))
+
+    def create_radio_parameter(mac):
+        radio_parameters = {'APMetricsWiFi6': 1,
+                 'AssociatedSTALinkMetricsInclusionPolicy': 1,
+                 'AssociatedSTATrafficStatsInclusionPolicy': 1,
+                 'BSSNumberOfEntries': 1,
+                 'ChannelUtilizationReportingThreshold': 0,
+                 'ChannelUtilizationThreshold': 0,
+                 'ChipsetVendor': 'prplmesh',
+                 'CurrentOperatingClassesNumberOfEntries': 1,
+                 'Enabled': 1,
+                 'ID': mac,
+                 'Noise': 0,
+                 'RCPISteeringThreshold': 0,
+                 'ReceiveOther': 0,
+                 'ReceiveSelf': 0,
+                 'STAReportingRCPIHysteresisMarginOverride': 0,
+                 'STAReportingRCPIThreshold': 0,
+                 'ScanResultNumberOfEntries': 0,
+                 'SteeringPolicy': 0,
+                 'TrafficSeparationCombinedBackhaul': 0,
+                 'TrafficSeparationCombinedFronthaul': 0,
+                 'Transmit': 0,
+                 'UnassociatedSTANumberOfEntries': 0,
+                 'Utilization': 0}
+        return radio_parameters
+
+
+    # 5.5 Get agents without radios
+    for agent in agent_list:
+        print("----agent radio count:%d"%len(agent.get_radios()))
+        if len(agent.get_radios()) == 0:
+            print("--Found an agent without radio.")
+            #Add a radio for every interface
+            radio_id = 1
+            device_id = agent.path.split(".")[5]
+            for iface in interface_list:
+                if iface.get_parent_agent() == agent:
+                    # print("--Found the parent agent")
+                    radio_path = "Device.WiFi.DataElements.Network.Device.%s.Radio.%d."%(device_id, radio_id)
+                    radio_parameters = create_radio_parameter(iface.params['MACAddress'])
+                    radio = Radio(radio_path, radio_parameters)
+                    print("--new radio:%s mac:%s"%(radio.path, radio.params['ID']))
+                    agent.add_radio(radio)
+
 
     # 6. Collect BSSs and map them back to radios and interfaces
     for e in nbapi_json:
         if re.search(r"\.BSS\.\d{1,10}\.$", e['path']):
+            print("--add bss path:%s"%e["path"])
             for agent in agent_list:
+                radio_found = False
                 for radio in agent.get_radios():
                     if e['path'].startswith(radio.path):
+                        # Device.WiFi.DataElements.Network.Device.2.Radio.2 
                         bss = BSS(e['path'], e['parameters'])
-                        radio.add_bss(bss)
+                        
+                        # print("--add bss:%s to interface:%s"%(e['path'], agent.path))
+                        ifaceFound = False
                         for iface in interface_list:
                             if radio.params['ID'] == iface.params['MACAddress']:
                                 bss.interface = iface
+                                ifaceFound = True
+                                radio_found = True
+                                print("--add bss:%s to interface:%s radio:%s iface:%s"%(e['path'], iface.path, radio.params['ID'], iface.params['MACAddress']))
                                 break
+                        if not ifaceFound:
+                            print("interface not found for bss:%s radio:%s"%(e['path'], radio.params['ID']))
+                            bss_device_id = bss.path.split(".")[5]
+                            for iface in interface_list:
+                                iface_device_id = iface.path.split(".")[5]
+                                print("----bss_device_id:%s iface_device_id:%s"%(bss_device_id, iface_device_id))
+                                if iface_device_id == bss_device_id:
+                                    # print("Change interface mac from:%s to %s"%(iface.params['Name'], bss.params['BSSID']))
+                                    # interface_list.remove(iface)
+                                    # iface.params['Name'] = bss.params['BSSID']
+                                    # iface.params['MACAddress'] = bss.params['BSSID']
+                                    # interface_list.append(iface)
+
+                                    print("Change bss mac from:%s to %s"%(bss.params['BSSID'], radio.params["ID"]))
+                                    bss.params['BSSID'] = radio.params["ID"]
+                                    
+                                    bss.interface = iface
+                                    print("--add bss:%s to interface:%s"%(e['path'], iface.path))
+                                    break
+
+                        radio.add_bss(bss)
+
+                # if not radio_found:
+                #     print("radio not found for bss:%s"%(e['path']))
+                #     bss_device_id = bss.path.split(".")[5]
+                #     for iface in interface_list:
+                #         iface_device_id = iface.path.split(".")[5]
+                #         print("----bss_device_id:%s iface_device_id:%s"%(bss_device_id, iface_device_id))
+                #         if iface_device_id == bss_device_id:
+                #             # print("Change interface mac from:%s to %s"%(iface.params['Name'], bss.params['BSSID']))
+                #             # interface_list.remove(iface)
+                #             # iface.params['Name'] = bss.params['BSSID']
+                #             # iface.params['MACAddress'] = bss.params['BSSID']
+                #             # interface_list.append(iface)
+
+                #             print("Change bss mac from:%s to %s"%(bss.params['BSSID'], radio.params["ID"]))
+                #             bss.params['BSSID'] = radio.params["ID"]
+                            
+                #             bss.interface = iface
+                #             print("--add bss:%s to interface:%s"%(e['path'], iface.path))
+                #             break
+
+
                             # if e['parameters']['BSSID'] == iface.params['MACAddress']:
                             #    bss.interface = iface
                             #    break
-                            
+    def get_bss_params(mac):
+        bss_params = {'BSSID': mac,
+                 'BackhaulUse': 1,
+                 'BroadcastBytesReceived': 0,
+                 'BroadcastBytesSent': 0,
+                 'ByteCounterUnits': 0,
+                 'Enabled': 1,
+                 'EstServiceParametersBE': 0,
+                 'EstServiceParametersBK': 0,
+                 'EstServiceParametersVI': 0,
+                 'EstServiceParametersVO': 0,
+                 'FronthaulUse': 1,
+                 'IsVBSS': 0,
+                 'LastChange': 360,
+                 'MulticastBytesReceived': 0,
+                 'MulticastBytesSent': 0,
+                 'SSID': 'prplmesh_test',
+                 'STANumberOfEntries': 0,
+                 'TimeStamp': '2023-06-03T11:52:51.717399798Z',
+                 'UnicastBytesReceived': 0,
+                 'UnicastBytesSent': 0}
+        return bss_params
+    # 6.5 Add BSS to devices with no BSS
+    for agent in agent_list:
+        for radio in agent.get_radios():
+            if len(radio.bsses) == 0:
+                device_id = agent.path.split(".")[5]
+                radio_id = radio.path.split(".")[7]
+                bss_path = "Device.WiFi.DataElements.Network.Device.%s.Radio.%s.BSS.1."%(device_id, radio_id)
+                
+                bss = BSS(bss_path, get_bss_params(radio.params["ID"]))
+                for iface in interface_list:
+                    if radio.params['ID'] == iface.params['MACAddress']:
+                        bss.interface = iface
+                print("----add bss:%s to interface:%s"%(e['path'], iface.path))
+                radio.add_bss(bss)
+
+
     # 7. Map Stations to the BSS they're connected to.
     station_list: List[Station] = []
     for e in nbapi_json:
@@ -624,6 +785,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         if e['path'].startswith(bss.path):
                             sta = Station(e['path'], e['parameters'])
                             station_list.append(sta)
+                            print("--add station:%s to bss:%s"%(e['path'], bss.path))
                             bss.add_connected_station(sta)
                             bss.interface.orientation = ORIENTATION.DOWN
                             # Exclude stations that are actually agents
@@ -638,27 +800,27 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     station.set_steered(True)
 
     # DEBUG
-    # for i, agent in enumerate(agent_list):
-    #     print(f"Agent_{i} ID {agent.get_id()}, {agent.num_radios()} radios.")
-    #     for n, radio in enumerate(agent.get_radios()):
-    #         print(f"\tRadio_{n} (belonging to device {agent.get_id()} has ruid {radio.get_ruid()}")
-    #         for m, bss in enumerate(radio.get_bsses()):
-    #             print(f"\t\tRadio (ruid: {radio.get_ruid()}) BSS_{m}: {bss.get_bssid()}")
-    #             for o, sta in enumerate(bss.get_connected_stations()):
-    #                 print(f"\t\t\tBSS {bss.get_bssid()} connected station: STA_{o}: {sta.get_mac()}")
+    for i, agent in enumerate(agent_list):
+        print(f"Agent_{i} ID {agent.get_id()}, {agent.num_radios()} radios.")
+        for n, radio in enumerate(agent.get_radios()):
+            print(f"\tRadio_{n} (belonging to device {agent.get_id()} has ruid {radio.get_ruid()}")
+            for m, bss in enumerate(radio.get_bsses()):
+                print(f"\t\tRadio (ruid: {radio.get_ruid()}) BSS_{m}: {bss.get_bssid()}")
+                for o, sta in enumerate(bss.get_connected_stations()):
+                    print(f"\t\t\tBSS {bss.get_bssid()} connected station: STA_{o}: {sta.get_mac()}")
 
-    #Connection tree debug
-    # def print_conns(agt: Agent):
-    #     for ifc in agt.get_interfaces():
-    #         for child in ifc.get_children():
-    #             if not child.get_children():
-    #                 print(f'{child.path.replace("Device.WiFi.DataElements.Network.","")} has backhaul: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
-    #         if ifc.get_connected_stations():
-    #             for sta in ifc.get_connected_stations():
-    #                 print(f'\tSTATION: {sta.get_mac()} is connected to: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
+    # Connection tree debug
+    def print_conns(agt: Agent):
+        for ifc in agt.get_interfaces():
+            for child in ifc.get_children():
+                if not child.get_children():
+                    print(f'{child.path.replace("Device.WiFi.DataElements.Network.","")} has backhaul: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
+            if ifc.get_connected_stations():
+                for sta in ifc.get_connected_stations():
+                    print(f'\tSTATION: {sta.get_mac()} is connected to: {ifc.path.replace("Device.WiFi.DataElements.Network.","")}')
         
-    # for a in agent_list:
-    #     print_conns(a)
+    for a in agent_list:
+        print_conns(a)
 
     # 5. Go for a walk. Go feel the sun. Maybe read a book about recursion.
     return Topology(agent_list, g_controller_id)
@@ -836,6 +998,15 @@ def node_click(clickData):
     return "None found!"
 
 if __name__ == '__main__':
+    # import json
+    # import sys
+    # # Opening JSON file
+    # f = open('/home/yuce/Nextcloud/workspace/prpl/deplymentNotes/testDatamodels/ErrorCougarRunWithStation.Device.WiFi.DataElements.json')
+    
+    # data = json.load(f)
+    # marshall_nbapi_blob(data)
+    # print("-----DONE-------")
+    # sys.exit(99)
     # Silence imported module logs
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
