@@ -6,3 +6,5 @@ numpy==1.23.0
 pydot==1.4.2
 Pillow==9.0
 kaleido>=0.2.1
+Flask==2.2
+graphviz==0.20.1
