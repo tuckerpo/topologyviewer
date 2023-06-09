@@ -20,7 +20,7 @@ from topology import Topology
 import validation
 
 app = Dash(__name__)
-app.title = 'CableLabs EasyMesh Network Monitor'
+app.title = 'CableLabs/prpl Mesh Monitor'
 
 class NodeType(Enum):
     UNKNOWN = 0
@@ -409,7 +409,7 @@ g_controller_id = ""
 
 # HTML Layout / Components
 app.layout = html.Div([
-    html.Div([html.H1("EasyMesh Network Topology Graph")],
+    html.Div([html.H1("prplMesh Network Topology Graph")],
              className="row",
              style={'textAlign': "center"}),
     html.Div(
@@ -424,7 +424,7 @@ app.layout = html.Div([
                             dcc.Markdown(d("""
                             **EashMesh Network Controller**
 
-                            Input the IP and Port of the Controller in the EasyMesh network to visualize.
+                            Input the IP and Port of the Controller in the prplMesh network to visualize.
                             """)),
                             dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value='192.168.250.171'),
                             dcc.Input(id="port_input", type="text", placeholder="8080", value='8080'),
@@ -441,7 +441,7 @@ app.layout = html.Div([
                             html.Div(id="output", children='Press Submit to connect'),
                             html.Br(),
                             dcc.Markdown(d("""
-                            **Easymesh credentials**
+                            **prplMesh credentials**
 
                             SSID of the prplMesh network
                             """)),
