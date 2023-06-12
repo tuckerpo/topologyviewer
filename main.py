@@ -1012,6 +1012,6 @@ if __name__ == '__main__':
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
     logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d_%H:%M:%S')
-    app.run_server(debug=True)
+    app.run_server(debug=True, host="0.0.0.0")
     if nbapi_thread:
         nbapi_thread.quit()
