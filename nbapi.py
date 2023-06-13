@@ -13,7 +13,7 @@ import requests
 from controller_ctx import ControllerConnectionCtx
 from topology import Topology
 from easymesh import Agent, Interface, Neighbor, Station, UnassociatedStation, Radio, BSS, ORIENTATION
-from nbapi_persistent import handle_station_has_moved, station_has_undergone_move, add_new_signal_strength_measurement, register_station_to_radio
+from nbapi_persistent import handle_station_has_moved, station_has_undergone_move, add_new_signal_strength_measurement, register_station_to_radio, clear_all_signal_strength_measurements
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +216,7 @@ class NBAPITask(threading.Thread):
         The method that will be executed when the thread is started.
         It periodically retrieves the network topology using NBAPI.
         """
+        clear_all_signal_strength_measurements()
         while not self.quitting:
             url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/Device.WiFi.DataElements."
             logging.debug(f"Ping -> {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
