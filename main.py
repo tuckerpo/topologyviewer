@@ -84,8 +84,8 @@ def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
     """
     node_type_dict = {
         NodeType.STATION: (topology.get_station_from_hash, "Station: MAC: {} ConnectedTo: {}"),
-        NodeType.AGENT: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {}"),
-        NodeType.CONTROLLER: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {}")
+        NodeType.AGENT: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {} ID: {}"),
+        NodeType.CONTROLLER: (topology.get_agent_from_hash, "Agent: Model: {} NumRadios: {} ID: {}")
     }
     if node_type not in node_type_dict:
         return "Unknown! This shouldn't happen."
@@ -96,7 +96,7 @@ def gen_node_text(topology: Topology, node_id: str, node_type: NodeType):
     if node_type == NodeType.STATION:
         return node_format.format(node_obj.get_mac(), topology.get_bssid_connection_for_sta(node_obj.get_mac()))
     if node_type in [NodeType.AGENT, NodeType.CONTROLLER]:
-        return node_format.format(node_obj.get_manufacturer(), node_obj.num_radios())
+        return node_format.format(node_obj.get_manufacturer(), node_obj.num_radios(), node_obj.get_id())
     return ""
 
 
