@@ -1,4 +1,5 @@
 # **EasyMesh Network Topology UI**
+[![Build Status](https://gitlab.com/prpl-foundation/prplmesh/topologyViewer/badges/master/pipeline.svg)](https://gitlab.com/prpl-foundation/prplmesh/topologyViewer/pipelines)
 
 ## **Requirements**
 For initial set-up, you'll need a serial or SSH connection to the Controller in your EasyMesh network (for running `ubus` commands.)
