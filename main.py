@@ -26,7 +26,7 @@ import json
 import logging
 from enum import Enum
 from textwrap import dedent as d
-
+import configparser
 import networkx as nx
 import plotly.graph_objs as go
 from dash import Dash, Input, Output, State, dcc, html
@@ -48,7 +48,6 @@ from nbapi import NBAPITask
 from nbapi_persistent import get_did_station_move, get_rssi_measurements
 
 app = Dash(__name__)
-app.title = 'CableLabs EasyMesh Network Monitor'
 
 g_StationsToRadio = {}
 nbapi_thread: NBAPITask = None
@@ -589,137 +588,6 @@ styles = {
     }
 }
 
-# HTML Layout / Components
-app.layout = html.Div([
-    html.Div([html.H1("EasyMesh Network Topology Graph")],
-             className="row",
-             style={'textAlign': "center"}),
-    html.Div(
-        className="row",
-        children=[
-            html.Div(
-                className="two columns",
-                children=[
-                    html.Div(
-                        className="twelve.columns",
-                        children=[
-                            dcc.Markdown(d("""
-                            **EashMesh Network Controller**
-
-                            Input the IP and Port of the Controller in the EasyMesh network to visualize.
-                            """)),
-                            dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value='192.168.250.171'),
-                            dcc.Input(id="port_input", type="text", placeholder="8080", value='8080'),
-                            html.Br(),
-                            html.Br(),
-                            dcc.Markdown(d("""
-                            **HTTP Basic Auth Params**
-
-                            Username and password for the HTTP proxy.
-                            """)),
-                            dcc.Input(id='httpauth_user', type='text', placeholder='admin', value='admin'),
-                            dcc.Input(id='httpauth_pass', type='text', placeholder='admin', value='admin'),
-                            html.Button('Submit', id='submit-val', n_clicks=0),
-                            html.Div(id="output", children='Press Submit to connect'),
-                            html.Br(),
-                            dcc.Markdown(d("""
-                            **Easymesh credentials**
-
-                            SSID of the prplMesh network
-                            """)),
-                            dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True),
-                            dcc.Markdown(d("""
-                            **Create VBSS**
-                            """)),
-                            dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
-                            dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
-                            dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
-                            dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
-                            dcc.Dropdown(options=[], id='vbss-creation-ruid', placeholder='Select a RUID.'),
-                            dcc.Interval(id='vbss-creation-interval', interval=300, n_intervals=0),
-                            html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
-                            html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
-                            html.Br(),
-                            html.Br(),
-                            dcc.Markdown(d("""
-                            **Move VBSS**
-                            """)),
-                            dcc.Input(id='vbss-move-ssid', type='text', placeholder='Destination SSID'),
-                            dcc.Input(id='vbss-move-password', type='text', placeholder='Destination password'),
-                            dcc.Dropdown(options=[], id='vbss-move-client-mac', placeholder='Select a station'),
-                            dcc.Dropdown(options=[], id='vbss-move-dest-ruid', placeholder='Select a destination RUID'),
-                            dcc.Interval(id='vbss-move-interval', interval=100, n_intervals=0),
-                            html.Button('Move', id='vbss-move-btn', n_clicks=0),
-                            html.Div(id='vbss-move-output', children='Click move'),
-                            dcc.Markdown(d("""
-                            **Destroy VBSS**
-                            """)),
-                            daq.BooleanSwitch(id='vbss-destruction-disassociate', label='Disassociate Clients?', on=True),
-                            dcc.Dropdown(options=[], id='vbss-destruction-bssid', placeholder='Select a VBSSID to destroy.'),
-                            html.Button('Destroy', id='vbss-destruction-submit', n_clicks=0),
-                            html.Div(id='vbss-destruction-output', children='Click destroy'),
-                        ],
-                        style={'height': '300px'}
-                    ),
-                ]
-            ),
-            html.Div(
-                className="eight columns",
-                children=[
-                    html.Div(
-                        className="twelve columns",
-                        children=[dcc.Graph(id="my-graph",
-                                            figure=network_graph(get_topology()), animate=True, config={'displayModeBar': True}),
-                                dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
-                        style={'height': '800px'}
-                    ),
-                    html.Div(
-                        className="twelve columns",
-                        children=[dcc.Graph(id="rssi-plot",
-                                figure=dict(
-                                    layout=dict(
-                                    )
-                                ), config={'displayModeBar': True}),
-                                dcc.Interval(id='rssi-plot-interval', interval=500, n_intervals=0)],
-                    ),
-                ]
-            ),
-            html.Div(
-                className="two columns",
-                children=[
-                    html.Div(
-                        className='twelve columns',
-                        children=[
-                            dcc.Markdown(d("""
-                            **Transition Station**
-
-                            Transition station to new agent.
-                            """)),
-                            dcc.Dropdown(options=[], id='transition_station', placeholder='Select a station'),
-                            dcc.Dropdown(options=[], id='transition_bssid', placeholder='Select a new BSSID.'),
-                            dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", inline=True),
-                            dcc.Interval(id='transition-interval', interval=300, n_intervals=0),
-                            html.Button('Transition', id='transition-submit', n_clicks=0),
-                            html.Div(id="transition-output", children='Press Transition to begin station transition.')
-                        ],
-                        style={'height': '300px'}),
-                    html.Div(
-                        className='twelve columns',
-                        children=[
-                            dcc.Markdown(d("""
-                            **Node Data**
-
-                            Click on a node for details.
-                            """)),
-                            html.Pre(id='node-click', style=styles['pre'])
-                        ],
-                        style={'height': '400px'})
-                ]
-            ),
-        ]
-    )
-])
-
 # RUID -> STA_MAC -> [RSSI measurements]
 g_RSSI_Measurements = {}
 
@@ -1126,12 +994,193 @@ def update_rssi_plot(n_intervals: int):
 # Init callback function attribute (static)
 update_rssi_plot.last_sta = None
 
+def get_app_title(config: configparser.ConfigParser) -> str:
+    """Get the Dash app title based on the branding field of the config passed in.
+
+    Args:
+        config (configparser.ConfigParser): The config file for the app.
+
+    Returns:
+        str: The appropriate branding based on the value of the 'branding' key in the 'ui' section
+        of the config, if found.
+        If this key is missing, a default title is returned.
+    """
+    if 'ui' in config and 'branding' in config['ui']:
+        branding = config['ui']['branding'].lower()
+        if branding in ('prpl', 'prplmesh'):
+            return 'CableLabs/prpl Mesh Monitor'
+    # default
+    return 'CableLabs EasyMesh Network Monitor'
+
+def get_branding_sensitive_string_from_config(config: configparser.ConfigParser) -> str:
+    """Get brand-sensitive string from config branding field
+
+    Args:
+        config (configparser.ConfigParser): The config
+
+    Returns:
+        str: The brand string for the 'branding' key in the 'ui' section of the config, if found.
+        Otherwise returns default brand string.
+    """
+    if 'ui' in config and 'branding' in config['ui']:
+        if config['ui']['branding'].lower() in ('prpl', 'prplmesh'):
+            return 'prplMesh'
+    # default
+    return 'EasyMesh'
+
+def gen_app_layout(config: configparser.ConfigParser):
+    """Create an HTML layout based on the configuration file provided.
+
+    Args:
+        config (configparser.ConfigParser): The config file
+
+    Returns:
+        plotly layout: The HTML layout for the app
+    """
+    ui_section = config["ui"]
+    auth_section = config["auth"]
+    brand_string = get_branding_sensitive_string_from_config(config)
+    layout = html.Div([
+        html.Div([html.H1(f"{brand_string} Network Topology Graph")],
+                className="row",
+                style={'textAlign': "center"}),
+        html.Div(
+            className="row",
+            children=[
+                html.Div(
+                    className="two columns",
+                    children=[
+                        html.Div(
+                            className="twelve.columns",
+                            children=[
+                                dcc.Markdown(d(f"""
+                                **{brand_string} Network Controller**
+
+                                Input the IP and Port of the Controller in the {brand_string} network to visualize.
+                                """)),
+                                dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value=ui_section.get('controller-addr', '192.168.1.110')),
+                                dcc.Input(id="port_input", type="text", placeholder="8080", value=ui_section.get('controller-port', '8080')),
+                                html.Br(),
+                                html.Br(),
+                                dcc.Markdown(d("""
+                                **HTTP Basic Auth Params**
+
+                                Username and password for the HTTP proxy.
+                                """)),
+                                dcc.Input(id='httpauth_user', type='text', placeholder='admin', value=auth_section.get('http-auth-user', 'admin')),
+                                dcc.Input(id='httpauth_pass', type='text', placeholder='admin', value=auth_section.get('http-auth-pass', 'admin')),
+                                html.Button('Submit', id='submit-val', n_clicks=0),
+                                html.Div(id="output", children='Press Submit to connect'),
+                                html.Br(),
+                                dcc.Markdown(d(f"""
+                                **{brand_string} credentials**
+
+                                SSID of the prplMesh network
+                                """)),
+                                dcc.Input(id='easymesh_ssid', type='text', value='SSID', readOnly=True, disabled=True),
+                                dcc.Markdown(d("""
+                                **Create VBSS**
+                                """)),
+                                dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
+                                dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
+                                dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
+                                dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
+                                dcc.Dropdown(options=[], id='vbss-creation-ruid', placeholder='Select a RUID.'),
+                                dcc.Interval(id='vbss-creation-interval', interval=300, n_intervals=0),
+                                html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
+                                html.Button('Create VBSS', id='vbss-creation-submit', n_clicks=0),
+                                html.Br(),
+                                html.Br(),
+                                dcc.Markdown(d("""
+                                **Move VBSS**
+                                """)),
+                                dcc.Input(id='vbss-move-ssid', type='text', placeholder='Destination SSID'),
+                                dcc.Input(id='vbss-move-password', type='text', placeholder='Destination password'),
+                                dcc.Dropdown(options=[], id='vbss-move-client-mac', placeholder='Select a station'),
+                                dcc.Dropdown(options=[], id='vbss-move-dest-ruid', placeholder='Select a destination RUID'),
+                                dcc.Interval(id='vbss-move-interval', interval=100, n_intervals=0),
+                                html.Button('Move', id='vbss-move-btn', n_clicks=0),
+                                html.Div(id='vbss-move-output', children='Click move'),
+                                dcc.Markdown(d("""
+                                **Destroy VBSS**
+                                """)),
+                                daq.BooleanSwitch(id='vbss-destruction-disassociate', label='Disassociate Clients?', on=True),
+                                dcc.Dropdown(options=[], id='vbss-destruction-bssid', placeholder='Select a VBSSID to destroy.'),
+                                html.Button('Destroy', id='vbss-destruction-submit', n_clicks=0),
+                                html.Div(id='vbss-destruction-output', children='Click destroy'),
+                            ],
+                            style={'height': '300px'}
+                        ),
+                    ]
+                ),
+                html.Div(
+                    className="eight columns",
+                    children=[
+                        html.Div(
+                            className="twelve columns",
+                            children=[dcc.Graph(id="my-graph",
+                                                figure=network_graph(get_topology()), animate=True, config={'displayModeBar': True}),
+                                    dcc.Interval(id='graph-interval', interval=3000, n_intervals=0)],
+                            style={'height': '800px'}
+                        ),
+                        html.Div(
+                            className="twelve columns",
+                            children=[dcc.Graph(id="rssi-plot",
+                                    figure=dict(
+                                        layout=dict(
+                                        )
+                                    ), config={'displayModeBar': True}),
+                                    dcc.Interval(id='rssi-plot-interval', interval=500, n_intervals=0)],
+                        ),
+                    ]
+                ),
+                html.Div(
+                    className="two columns",
+                    children=[
+                        html.Div(
+                            className='twelve columns',
+                            children=[
+                                dcc.Markdown(d("""
+                                **Transition Station**
+
+                                Transition station to new agent.
+                                """)),
+                                dcc.Dropdown(options=[], id='transition_station', placeholder='Select a station'),
+                                dcc.Dropdown(options=[], id='transition_bssid', placeholder='Select a new BSSID.'),
+                                dcc.RadioItems(options=['VBSS', 'Client Steering'], id="transition-type-selection", inline=True),
+                                dcc.Interval(id='transition-interval', interval=300, n_intervals=0),
+                                html.Button('Transition', id='transition-submit', n_clicks=0),
+                                html.Div(id="transition-output", children='Press Transition to begin station transition.')
+                            ],
+                            style={'height': '300px'}),
+                        html.Div(
+                            className='twelve columns',
+                            children=[
+                                dcc.Markdown(d("""
+                                **Node Data**
+
+                                Click on a node for details.
+                                """)),
+                                html.Pre(id='node-click', style=styles['pre'])
+                            ],
+                            style={'height': '400px'})
+                    ]
+                ),
+            ]
+        )
+    ])
+    return layout
+
 if __name__ == '__main__':
+    config_parser = configparser.ConfigParser()
+    config_parser.read("config.ini")
     # Silence imported module logs
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
     logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d_%H:%M:%S')
-    app.run_server(debug=True)
+    app.layout = gen_app_layout(config_parser)
+    app.title = get_app_title(config_parser)
+    app.run_server(debug=config_parser.getboolean('server', 'debug'))
     if nbapi_thread:
         nbapi_thread.quit()
