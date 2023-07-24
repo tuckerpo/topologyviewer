@@ -48,7 +48,6 @@ from nbapi import NBAPITask
 from nbapi_persistent import get_did_station_move, get_rssi_measurements
 
 app = Dash(__name__)
-app.title = 'CableLabs EasyMesh Network Monitor'
 
 g_StationsToRadio = {}
 nbapi_thread: NBAPITask = None
@@ -995,6 +994,24 @@ def update_rssi_plot(n_intervals: int):
 # Init callback function attribute (static)
 update_rssi_plot.last_sta = None
 
+def get_app_title(config: configparser.ConfigParser) -> str:
+    """Get the Dash app title based on the branding field of the config passed in.
+
+    Args:
+        config (configparser.ConfigParser): The config file for the app.
+
+    Returns:
+        str: The appropriate branding based on the value of the 'branding' key in the 'ui' section
+        of the config, if found.
+        If this key is missing, a default title is returned.
+    """
+    if 'ui' in config and 'branding' in config['ui']:
+        branding = config['ui']['branding'].lower()
+        if branding in ('prpl', 'prplmesh'):
+            return 'CableLabs/prpl Mesh Monitor'
+    # default
+    return 'CableLabs EasyMesh Network Monitor'
+
 def gen_app_layout(config: configparser.ConfigParser):
     """Create an HTML layout based on the configuration file provided.
 
@@ -1146,6 +1163,7 @@ if __name__ == '__main__':
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
     logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d_%H:%M:%S')
     app.layout = gen_app_layout(config_parser)
+    app.title = get_app_title(config_parser)
     app.run_server(debug=config_parser.getboolean('server', 'debug'))
     if nbapi_thread:
         nbapi_thread.quit()
