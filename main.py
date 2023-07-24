@@ -1023,8 +1023,9 @@ def gen_app_layout(config: configparser.ConfigParser):
     """
     ui_section = config["ui"]
     auth_section = config["auth"]
+    brand_string = get_branding_sesitive_strings_from_config(config)
     layout = html.Div([
-        html.Div([html.H1("EasyMesh Network Topology Graph")],
+        html.Div([html.H1(f"{brand_string} Network Topology Graph")],
                 className="row",
                 style={'textAlign': "center"}),
         html.Div(
@@ -1036,10 +1037,10 @@ def gen_app_layout(config: configparser.ConfigParser):
                         html.Div(
                             className="twelve.columns",
                             children=[
-                                dcc.Markdown(d("""
-                                **EashMesh Network Controller**
+                                dcc.Markdown(d(f"""
+                                **{brand_string} Network Controller**
 
-                                Input the IP and Port of the Controller in the EasyMesh network to visualize.
+                                Input the IP and Port of the Controller in the {brand_string} network to visualize.
                                 """)),
                                 dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value=ui_section.get('controller-addr', '192.168.1.110')),
                                 dcc.Input(id="port_input", type="text", placeholder="8080", value=ui_section.get('controller-port', '8080')),
@@ -1055,8 +1056,8 @@ def gen_app_layout(config: configparser.ConfigParser):
                                 html.Button('Submit', id='submit-val', n_clicks=0),
                                 html.Div(id="output", children='Press Submit to connect'),
                                 html.Br(),
-                                dcc.Markdown(d("""
-                                **Easymesh credentials**
+                                dcc.Markdown(d(f"""
+                                **{brand_string} credentials**
 
                                 SSID of the prplMesh network
                                 """)),
