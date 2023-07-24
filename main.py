@@ -1012,6 +1012,22 @@ def get_app_title(config: configparser.ConfigParser) -> str:
     # default
     return 'CableLabs EasyMesh Network Monitor'
 
+def get_branding_sensitive_string_from_config(config: configparser.ConfigParser) -> str:
+    """Get brand-sensitive string from config branding field
+
+    Args:
+        config (configparser.ConfigParser): The config
+
+    Returns:
+        str: The brand string for the 'branding' key in the 'ui' section of the config, if found.
+        Otherwise returns default brand string.
+    """
+    if 'ui' in config and 'branding' in config['ui']:
+        if config['ui']['branding'].lower() in ('prpl', 'prplmesh'):
+            return 'prplMesh'
+    # default
+    return 'EasyMesh'
+
 def gen_app_layout(config: configparser.ConfigParser):
     """Create an HTML layout based on the configuration file provided.
 
@@ -1023,8 +1039,9 @@ def gen_app_layout(config: configparser.ConfigParser):
     """
     ui_section = config["ui"]
     auth_section = config["auth"]
+    brand_string = get_branding_sensitive_string_from_config(config)
     layout = html.Div([
-        html.Div([html.H1("EasyMesh Network Topology Graph")],
+        html.Div([html.H1(f"{brand_string} Network Topology Graph")],
                 className="row",
                 style={'textAlign': "center"}),
         html.Div(
@@ -1036,10 +1053,10 @@ def gen_app_layout(config: configparser.ConfigParser):
                         html.Div(
                             className="twelve.columns",
                             children=[
-                                dcc.Markdown(d("""
-                                **EashMesh Network Controller**
+                                dcc.Markdown(d(f"""
+                                **{brand_string} Network Controller**
 
-                                Input the IP and Port of the Controller in the EasyMesh network to visualize.
+                                Input the IP and Port of the Controller in the {brand_string} network to visualize.
                                 """)),
                                 dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value=ui_section.get('controller-addr', '192.168.1.110')),
                                 dcc.Input(id="port_input", type="text", placeholder="8080", value=ui_section.get('controller-port', '8080')),
@@ -1055,8 +1072,8 @@ def gen_app_layout(config: configparser.ConfigParser):
                                 html.Button('Submit', id='submit-val', n_clicks=0),
                                 html.Div(id="output", children='Press Submit to connect'),
                                 html.Br(),
-                                dcc.Markdown(d("""
-                                **Easymesh credentials**
+                                dcc.Markdown(d(f"""
+                                **{brand_string} credentials**
 
                                 SSID of the prplMesh network
                                 """)),
