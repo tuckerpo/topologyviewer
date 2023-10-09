@@ -19,6 +19,16 @@ You'll additionally need some external packages:
 
 ## **To Run the topologyviewer:**
 
+### **Use included script:**
+
+`source prepenv.sh`
+
+`python main.py`
+
+-> open your browser at: http://localhost:8050/
+
+### **Manually prepare python env:**
+
 `python -m venv ./`
 
 `source ./bin/activate`

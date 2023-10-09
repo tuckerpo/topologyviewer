@@ -9,6 +9,8 @@ import threading
 import re
 import logging
 import requests
+import sys
+from pprint import pprint
 
 from controller_ctx import ControllerConnectionCtx
 from topology import Topology
@@ -36,6 +38,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
     agent_dict: Dict[str, Agent] = {}
     iface_dict: Dict[str, Interface] = {}
+    agent_ifaces = []
 
     for entry in nbapi_json:
         path = entry['path']
@@ -57,6 +60,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     iface.set_parent_agent(agent)
                     agent.add_interface(iface)
                     iface_dict[path] = iface
+                    agent_ifaces.append(params['MACAddress'])
 
         # 3. Get Neighbors of each Interface
         controller_backhaul_interface = {}
@@ -68,7 +72,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         interface.add_neighbor(Neighbor(path, params))
 
                         # Mark the backhaul interface of the controller: should be Ethernet type and have at least 1 neighbor
-                        if (agent.get_id() == controller_id) and (interface.params['MediaType']<=1):
+                        if (agent.get_id() == controller_id) and (interface.params['MediaType'].count("ETHERNET")>=1):
                             controller_backhaul_interface = interface
                             controller_backhaul_interface.orientation = ORIENTATION.DOWN
                             controller_agent = agent
@@ -79,7 +83,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                 if agent.get_id() == controller_id:
                     controller_agent = agent
                     for iface in agent.get_interfaces():
-                        if iface.params['MediaType']<=1:
+                        if iface.params['MediaType'].count("ETHERNET")>=1: #<=1:
                             controller_backhaul_interface = iface
                             controller_backhaul_interface.orientation = ORIENTATION.DOWN
                             break
@@ -132,9 +136,14 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         bss = BSS(path, params)
                         radio.add_bss(bss)
                         for iface in iface_dict.values():
-                            if radio.params['ID'] == iface.params['MACAddress']:
+                            if bss.params['BSSID'] == iface.params['MACAddress']:
                                 bss.interface = iface
                                 break
+
+    # We need a full BSS topology, before parsing the stations
+    for entry in nbapi_json:
+        path = entry['path']
+        params = entry['parameters']
 
         # 7. Map Stations to the BSS they're connected to.
         station_list: List[Station] = []
@@ -144,6 +153,9 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     for bss in radio.get_bsses():
                         if path.startswith(bss.path):
                             sta = Station(path, params)
+                            if sta.get_mac() in agent_ifaces:
+                                # Do not show a station that is actually an agent
+                                continue
                             station_list.append(sta)
                             bss.add_connected_station(sta)
                             if station_has_undergone_move(sta.get_mac(), radio.get_ruid()):
@@ -220,9 +232,20 @@ class NBAPITask(threading.Thread):
         while not self.quitting:
             url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/Device.WiFi.DataElements."
             logging.debug(f"Ping -> {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            
+            if self.connection_ctx.authType == "basic":
+                nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            else:
+                nbapi_root_request_response = requests.get(url=url, headers=self.connection_ctx.authHeader, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            
             if not nbapi_root_request_response.ok:
-                logging.error(f"{self.connection_ctx.ip_addr}:{self.connection_ctx.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
+                # Check if the request failed because of an unexisting/old session token:
+                if nbapi_root_request_response.status_code==401 and "WWW-Authenticate" in nbapi_root_request_response.headers:
+                    if nbapi_root_request_response.headers["WWW-Authenticate"] == "bearer":
+                        logging.debug(f"Request failed because of invalid session token")
+                        self.connection_ctx.renewSession()
+                else:
+                    logging.error(f"{self.connection_ctx.ip_addr}:{self.connection_ctx.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
             else:
                 logging.debug(f"Pong <- {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
                 self.heartbeat_count = self.heartbeat_count + 1

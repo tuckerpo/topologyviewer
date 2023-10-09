@@ -389,9 +389,9 @@ class Interface():
         self.connected_stations: List[Station] = []
         self.connected_sta_key = 'STA(s)'
         self.params[self.connected_sta_key] = []
-        self.params["MediaTypeString"] = mediaType_to_str[self.params["MediaType"]]
-        self.params["wired"] = self.params["MediaType"]==0x0 or self.params["MediaType"]==0x1
-        self.params["wireless"] = self.params["MediaType"]>0x1 and self.params["MediaType"]<0x200
+        self.params["MediaTypeString"] = "Unk" #mediaType_to_str[self.params["MediaType"]]
+        self.params["wired"] = 1 #self.params["MediaType"]==0x0 or self.params["MediaType"]==0x1
+        self.params["wireless"] = 0 #self.params["MediaType"]>0x1 and self.params["MediaType"]<0x200
         self.x = 0
         self.y = 0
         self.orientation = ORIENTATION.RIGHT
