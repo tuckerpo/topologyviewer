@@ -251,10 +251,25 @@ def get_color_for_agent(color_selector: ColorSync, agent: Agent) -> str:
     """
     if not agent:
         return color_selector.get_color_list()[0]
-    agent_mac = agent.get_id()
-    if not color_selector.knows_agent(agent_mac):
-        color_selector.add_agent(agent_mac)
-    return color_selector.get_color_for_agent(agent_mac)
+    return 'green'
+
+def get_color_for_controller(color_selector: ColorSync, agent: Agent) -> str:
+    """Gets a color string for a given agent.
+
+    Args:
+        color_selector (ColorSync): The color selector
+        agent (Agent): The Agent to get a color for
+
+    Returns:
+        str: The string representation of the color to be used for rendering (e.g. 'purple')
+    """
+    if not agent:
+        return color_selector.get_color_list()[0]
+    return 'purple'
+    #agent_mac = agent.get_id()
+    #if not color_selector.knows_agent(agent_mac):
+    #    color_selector.add_agent(agent_mac)
+    #return color_selector.get_color_for_agent(agent_mac)
 
 g_ColorSync = ColorSync('green')
 g_RenderState = AgentRenderState()
@@ -389,7 +404,7 @@ def network_graph(topology: Topology):
             agent = topology.get_agent_from_hash(node)
             node_sizes.append(52)
             node_symbols.append(shape_type)
-            node_colors.append(get_color_for_agent(g_ColorSync, agent))
+            node_colors.append(get_color_for_controller(g_ColorSync, agent))
             node_labels.append("  prplMesh Controller + Agent<br>  running on prplOs")
         if G.nodes[node]['type'] == NodeType.AGENT:
             agent = topology.get_agent_from_hash(node)
