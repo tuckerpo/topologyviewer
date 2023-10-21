@@ -24,9 +24,9 @@ def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json)
     """
     url = f"http://{conn_ctx.ip_addr}:{conn_ctx.port}/commands"
     logging.debug(f"Sending NBAPI command to {url}, payload={command_payload}")
-    response = requests.post(url=url, timeout=3, json=command_payload)
+    response = requests.post(url=url, headers=conn_ctx.authHeader, timeout=3, json=command_payload)
     if not response.ok:
-        logging.error(f"Failed to send NBAPI command to f{url}: command payload: {command_payload}, HTTP code: {response.status_code}")
+        logging.error(f"Failed to send NBAPI command to f{url}: command payload: {command_payload}, HTTP code: {response.status_code} with session header: {conn_ctx.authHeader}")
 
 def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, dest_ruid: str, ssid: str, password: str, bss: BSS):
     """Sends a VBSS move request over the network.
@@ -116,10 +116,8 @@ def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str
     """
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
-    # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
-    json_payload = {"username": "admin",
-                    "password": "admin",
-                    "sendresp": True,
+    # ubus call X_PRPL-ORG_WiFiController.Network.ClientSteering ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
+    json_payload = {"sendresp": True,
                     "commandKey": "",
                     "command": "X_PRPL-ORG_WiFiController.Network.ClientSteering",
                     "inputArgs": {"station_mac": sta_mac,
