@@ -1,0 +1,141 @@
+ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" root@192.168.1.1
+
+scp -O -o UserKnownHostsFile=/dev/null -o "StrictHostKeyChecking=no" prpl-webui-.tar.gz root@192.168.1.2:webui.tar.gz
+
+# general model
+ubus-cli Device.WiFi.DataElements.Network.?
+
+| sed -n \$p
+
+
+scp -O -o "HostKeyAlgorithms=+ssh-rsa" -o "PubkeyAcceptedKeyTypes=ssh-rsa" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" openwrt-22.03.2-mvebu-cortexa9-cznic_turris-omnia-sysupgrade.img root@192.168.1.1:/root/i.img
+
+
+# steering
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
+
+# Has worked:
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"68:87:1c:78:e8:52", "target_bssid":"12:f9:c7:88:fa:58"}'
+
+
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"68:87:1c:78:e8:52", "target_bssid":"4e:68:6c:c4:25:1a"}'
+
+# laptop frederik-> werkt niet
+
+# Tablet : gewerkt: naar OSP 5GHz
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"7a:69:e1:25:b5:35", "target_bssid":"5a:13:d3:02:fc:86"}'
+
+
+# Tablet : gewerkt: naar Haze1 5GHz
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"7a:69:e1:25:b5:35", "target_bssid":"12:f9:c7:88:fb:5a"}'
+
+
+
+
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"7a:69:e1:25:b5:35", "target_bssid":"f4:05:95:ff:76:8a"}'
+
+# Tablet: OSP 5Ghz -> Haze1 5GHz
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"7a:69:e1:25:b5:35", "target_bssid":"12:f9:c7:88:fa:5a"}'
+
+
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"7a:69:e1:25:b5:35", "target_bssid":"12:f9:c7:88:fa:58"}'
+
+
+# # Tablet : Haze1 2.4 naar OSP -> fail
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"04:34:f6:3b:38:a8", "target_bssid":"5a:13:d3:02:fc:86"}'
+
+# Tablet OSP 2.4-> Haze1 2.4
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"04:34:f6:3b:38:a8", "target_bssid":"12:f9:c7:88:fa:58"}'
+
+
+
+# Tablet Haze1 2.4 -> Haze2 2.4 -> werkt niet
+ubus call X_PRPL-ORG_WiFiController.Network ClientSteering '{"station_mac":"04:34:f6:3b:38:a8", "target_bssid":"4e:68:6c:c4:25:1a"}'
+
+# X_PRPL-ORG_WiFiController.Configuration.BandSteeringEnabled=1
+# X_PRPL-ORG_WiFiController.Configuration.DaisyChainingDisabled=0
+
+
+# BSS coloring:
+ubus call X_PRPL-ORG_WiFiController.Network.Device.1.Radio.1 SetSpatialReuse '{"bss_color": "2", "srg_information_valid": "true", "srg_bss_color_bitmap": "1 2 3 10", "srg_partial_bssid_bitmap": "0 1 3 63"}'
+
+# view datamodel
+ubus-cli WiFi.Radio.1.IEEE80211ax.?
+
+# or:
+ubus call X_PRPL-ORG_WiFiController.Network.Device.1.Radio.1 SetSpatialReuse '{"bss_color": "2"}'
+
+cat /tmp/wlan*_hapd.conf |grep color
+
+
+
+
+
+root@prplOS:/opt/prplmesh/bin# ./prplmesh_cli  -c conn_map
+Start conn map
+Found 2 devices
+Device[1]: name: GW_MASTER, mac: 58:13:d3:02:f9:82, ipv4: 192.168.1.1
+        RADIO[1]: mac: 58:13:d3:02:f9:84, ch: 1, freq: 2.407GHz
+                VAP[0]: bssid: 5a:13:d3:02:fa:85, ssid: prplmesh_Paris_2.4GHz
+        RADIO[2]: mac: 58:13:d3:02:f9:85, ch: 58, freq: 5GHz
+                VAP[0]: bssid: 5a:13:d3:02:fc:86, ssid: prplmesh_Paris_5GHz
+        RADIO[3]: mac: 58:13:d3:02:f9:86, ch: 7, freq: 6GHz
+        Device[2]: name: Agent, mac: d8:58:d7:01:4c:ef LinkType: Ethernet
+
+
+
+/opt/prplmesh/bin/prplmesh_cli  -c conn_map
+/opt/prplmesh/bin/beerocks_cli -c bml_conn_map
+
+
+root@prplOS:/opt/prplmesh/bin# ./beerocks_cli -c bml_conn_map
+bml_connect: return value is: BML_RET_OK, Success status
+bml_nw_map_query: return value is: BML_RET_OK, Success status
+
+GW_BRIDGE: name: GW_MASTER, mac: 58:13:d3:02:f9:82, ipv4: 192.168.1.1
+    ETHERNET: mac: 5a:13:d3:02:f9:82
+    RADIO: wlan4 mac: 58:13:d3:02:f9:86, ch: 1, bw: 160H, freq: 5955MHz
+    RADIO: wlan0 mac: 58:13:d3:02:f9:84, ch: 1, bw: 20, freq: 2412MHz
+        bVAP[0]: wlan0.0 bssid: 5a:13:d3:02:fa:85, ssid: prplmesh_Paris_2.4GHz
+    RADIO: wlan2 mac: 58:13:d3:02:f9:85, ch: 60, bw: 80L, freq: 5300MHz
+        bVAP[0]: wlan2.0 bssid: 5a:13:d3:02:fc:86, ssid: prplmesh_Paris_5GHz
+DEBUG 19:16:47:407 <140006438718264> socket.cpp[156] --> Socket DTOR closing socket fd=6
+DEBUG 19:16:47:408 <140006438718264> socket.cpp[156] --> Socket DTOR closing socket fd=7
+bml_disconnect: return value is: BML_RET_OK, Success status
+root@prplOS:/opt/prplmesh/bin# ./prplmesh_cli  -c conn_map
+
+
+
+
+
+# Backhaul logs:
+tail -f /var/beerocks/logs/beerocks_backhaul.log
+
+http://192.168.1.1/serviceElements/Device.WiFi.DataElements.Network.
+
+session_id=$(curl --silent -X POST "http://192.168.1.2/session" --data '{"username":"admin","password":"admin"}' | jq -r .sessionID)
+
+curl -X GET "http://192.168.1.2/serviceElements/Device.WiFi.DataElements.Network." -H "Authorization: bearer $session_id"
+
+scp -O -o UserKnownHostsFile=/dev/null -o "StrictHostKeyChecking=no" prplmesh.ipk root@192.168.1.1:prplmesh.ipk
+
+curl -v -X POST "http://192.168.1.1/session" --data '{"username":"admin","password":"admin"}'
+
+
+# Disable all radios:
+ubus-cli WiFi.Radio.*.Enable=0
+
+# iw station list:
+iw dev wlan4.1 station dump
+
+
+// OSP flash
+mmc erase ${overlay_container_a_block_start} ${overlay_container_a_block_size}
+run update_fullimage
+
+// Haze flash
+tftpboot 0x44000000 openwrt-ipq807x-generic-prpl_haze-squashfs-sysupgrade.bin
+setenv untar_addr_kernel; setenv untar_addr_root
+untar 0x$fileaddr 0x$filesize kernel root
+if test -n $untar_addr_kernel; then flash '0:HLOS' 0x$untar_addr_kernel 0x$untar_size_kernel; else echo 'kernel not found'; fi
+if test -n $untar_addr_root; then flash 'rootfs' 0x$untar_addr_root 0x$untar_size_root; else echo 'rootfs not found'; fi
