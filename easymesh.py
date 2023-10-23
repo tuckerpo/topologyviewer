@@ -28,13 +28,13 @@ import hashlib
 
 mediaType_to_str = dict([
     (0x0, 'Fast Ethernet'),
-    (0x1, 'Gigabit Ethernet'),
+    ("IEEE_802_3AB_GIGABIT_ETHERNET", 'Gigabit Ethernet'),
     (0x100, 'B 2.4GHz'),
     (0x101, 'G 2.4GHz'),
     (0x102, 'A 5 GHz'),
-    (0x103, 'N 2.4 GHz'),
+    ("IEEE_802_11N_2_4_GHZ", 'N 2.4 GHz'),
     (0x104, 'N 5 GHz'),
-    (0x105, 'AC 5 GHz'),
+    ("IEEE_802_11AX", 'AC 5 GHz'),
     (0x106, 'AD 60 GHz'),
     (0x107, 'AF'),
     (0x108, 'AX'),
@@ -42,6 +42,23 @@ mediaType_to_str = dict([
     (0x201, 'IEEE_1901_FFT'),
     (0x300, 'MOCA_V1_1'),
     (0xffff, 'UNKNOWN_MEDIA')])
+
+# mediaType_to_str = dict([
+#     (0x0, 'Fast Ethernet'),
+#     (0x1, 'Gigabit Ethernet'),
+#     (0x100, 'B 2.4GHz'),
+#     (0x101, 'G 2.4GHz'),
+#     (0x102, 'A 5 GHz'),
+#     (0x103, 'N 2.4 GHz'),
+#     (0x104, 'N 5 GHz'),
+#     (0x105, 'AC 5 GHz'),
+#     (0x106, 'AD 60 GHz'),
+#     (0x107, 'AF'),
+#     (0x108, 'AX'),
+#     (0x200, 'IEEE_1901_WAVELET'),
+#     (0x201, 'IEEE_1901_FFT'),
+#     (0x300, 'MOCA_V1_1'),
+#     (0xffff, 'UNKNOWN_MEDIA')])
 
 class ORIENTATION(Enum):
     """Orientation of a given EasyMesh node in cartesian space.
@@ -389,12 +406,23 @@ class Interface():
         self.connected_stations: List[Station] = []
         self.connected_sta_key = 'STA(s)'
         self.params[self.connected_sta_key] = []
-        self.params["MediaTypeString"] = "Unk" #mediaType_to_str[self.params["MediaType"]]
-        self.params["wired"] = 1 #self.params["MediaType"]==0x0 or self.params["MediaType"]==0x1
-        self.params["wireless"] = 0 #self.params["MediaType"]>0x1 and self.params["MediaType"]<0x200
+        #self.params["MediaTypeString"] = "Unk" #mediaType_to_str[self.params["MediaType"]]
         self.x = 0
         self.y = 0
         self.orientation = ORIENTATION.RIGHT
+
+        if self.params["MediaType"] in mediaType_to_str:
+            self.params["MediaTypeString"] = mediaType_to_str[self.params["MediaType"]]
+        else:
+            self.params["MediaTypeString"] = "Unknown"
+
+        if self.params["MediaType"] in ["IEEE_802_11N_2_4_GHZ", "IEEE_802_11AX"]:
+            self.params["wired"] = 0 #self.params["MediaType"]==0x0 or self.params["MediaType"]==0x1
+            self.params["wireless"] = 1 #self.params["MediaType"]>0x1 and self.params["MediaType"]<0x200
+        else:
+            self.params["wired"] = 1
+            self.params["wireless"] = 0
+
 
     def add_connected_station(self, station) -> None:
         """Adds a station to this interface's list of connected stations.
