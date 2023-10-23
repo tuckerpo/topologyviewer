@@ -129,6 +129,10 @@ ubus-cli WiFi.Radio.*.Enable=0
 iw dev wlan4.1 station dump
 
 
+RDKB:
+ip addr add 192.168.1.98/24 dev lan3
+
+
 // OSP flash
 mmc erase ${overlay_container_a_block_start} ${overlay_container_a_block_size}
 run update_fullimage

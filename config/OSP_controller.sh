@@ -197,17 +197,17 @@ sleep 10
 # configure private vaps
 # 5GHz
 ubus-cli WiFi.SSID.1.SSID="prplmesh_Paris_5GHz"
-ubus-cli WiFi.AccessPoint.1.Security.KeyPassPhrase="prplmesh_pass"
+ubus-cli WiFi.AccessPoint.1.Security.KeyPassPhrase="prplmesh"
 ubus-cli WiFi.AccessPoint.1.Security.ModeEnabled="WPA2-Personal"
 #ubus-cli WiFi.AccessPoint.1.WPS.ConfigMethodsEnabled="PushButton"
 sleep 5
 ubus-cli WiFi.SSID.2.SSID="prplmesh_Paris_2.4GHz"
-ubus-cli WiFi.AccessPoint.2.Security.KeyPassPhrase="prplmesh_pass"
+ubus-cli WiFi.AccessPoint.2.Security.KeyPassPhrase="prplmesh"
 ubus-cli WiFi.AccessPoint.2.Security.ModeEnabled="WPA2-Personal"
 #ubus-cli WiFi.AccessPoint.2.WPS.ConfigMethodsEnabled="PushButton"
 sleep 5
 ubus-cli WiFi.SSID.3.SSID="prplmesh_Paris_6GHz"
-ubus-cli WiFi.AccessPoint.3.Security.KeyPassPhrase="prplmesh_pass"
+ubus-cli WiFi.AccessPoint.3.Security.KeyPassPhrase="prplmesh"
 #ubus-cli WiFi.AccessPoint.3.Security.ModeEnabled="WPA2-Personal"
 #ubus-cli WiFi.AccessPoint.3.WPS.ConfigMethodsEnabled="PushButton"
 
