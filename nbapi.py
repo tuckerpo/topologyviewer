@@ -249,6 +249,10 @@ class NBAPITask(threading.Thread):
                 self.heartbeat_count = self.heartbeat_count + 1
                 nbapi_root_json_blob = nbapi_root_request_response.json()
                 self.topology = marshall_nbapi_blob(nbapi_root_json_blob)
+                # If the Controller could not be resolved by parsing the NBAPI blob, perhaps we have the wrong data model root.
+                if self.topology.get_controller() is None:
+                    logging.debug("Could not marshall NBAPI blob -- fetching the data model root in case it must be refreshed.")
+                    self.resolve_root_data_model_path()
                 sleep(self.cadence_ms // 1000)
 
     def get_controller_id(self) -> str:
