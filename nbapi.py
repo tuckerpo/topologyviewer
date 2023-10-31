@@ -212,6 +212,25 @@ class NBAPITask(threading.Thread):
         else:
             self.auth=(connection_ctx.auth.user, connection_ctx.auth.password)
 
+    def resolve_root_data_model_path(self) -> None:
+        """
+        Sends an HTTP GET to the NBAPI endpoint that exposes the root data model path.
+        In olden times, the root controller data model path was always "Device.WiFi.DataElements"
+        This is now configurable via prplos.
+        We initially assume it's still "Device.WiFi.DataElements", but if that fails to resolve,
+        this method should be called to update the self.root_dm_path member.
+        """
+        url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/root_dm_path"
+        logging.debug(f"Checking root DM path at {url}")
+        response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+        if not response.ok:
+            logging.error(f"{url} response code {response.status_code} '{response.reason}': cannot resolve root DM path")
+        else:
+            response_json = response.json()
+            logging.debug(f"Root DM path is {response_json}")
+            if self.root_dm_path != response_json['path']:
+                self.root_dm_path = response_json['path']
+
     # Override threading.Thread.run(self)->None
     def run(self):
         """
