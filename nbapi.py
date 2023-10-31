@@ -205,6 +205,8 @@ class NBAPITask(threading.Thread):
         self.connection_timeout_seconds = 3
         self.read_timeout_seconds = 10
         self.topology: Topology = None
+        # Default value if unchanged in prplos config
+        self.root_dm_path: str = "Device.WiFi.DataElements."
         if not connection_ctx.auth:
             self.auth=('admin', 'admin')
         else:
@@ -218,7 +220,7 @@ class NBAPITask(threading.Thread):
         """
         clear_all_signal_strength_measurements()
         while not self.quitting:
-            url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/Device.WiFi.DataElements."
+            url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/{self.root_dm_path}"
             logging.debug(f"Ping -> {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
             nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
             if not nbapi_root_request_response.ok:
