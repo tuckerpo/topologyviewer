@@ -142,6 +142,11 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             for agent in agent_dict.values():
                 for radio in agent.get_radios():
                     for bss in radio.get_bsses():
+
+                        #PPM-2655 Avoid backhaul connection showing as fronthaul connection
+                        if "BackhaulUse" in bss.params and bss.params["BackhaulUse"] == 1 and bss.params["FronthaulUse"] == 0:
+                            continue
+
                         if path.startswith(bss.path):
                             sta = Station(path, params)
                             station_list.append(sta)
