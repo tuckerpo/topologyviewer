@@ -404,6 +404,12 @@ def network_graph(topology: Topology):
                 node_labels.append("  prplMesh Agent on SWAN OS<br>  (Sagemcom Extender)")
             elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "GL.iNet GL-B1300": # prplMesh on GL-inet
                 node_labels.append("  prplMesh Agent on prplOS<br>  (GL.iNet B1300)")
+            elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "prpl Foundation Haze":
+                node_labels.append("  prplMesh Agent on prplOS<br>  (Haze)")
+            elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "WNC RERQ-WI81":
+                node_labels.append("  prplMesh Agent on prplOS<br>  (Freedom)")
+            elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "freedom_rdkb":
+                node_labels.append("  prplMesh Agent on RDK-B<br>  (Freedom)")
             else:
                 node_labels.append(" unknown EasyMesh Agent")
 
