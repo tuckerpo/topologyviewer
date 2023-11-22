@@ -68,10 +68,19 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         interface.add_neighbor(Neighbor(path, params))
 
                         # Mark the backhaul interface of the controller: should be Ethernet type and have at least 1 neighbor
-                        if (agent.get_id() == controller_id) and (interface.params['MediaType']<=1):
-                            controller_backhaul_interface = interface
-                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                            controller_agent = agent
+                        if isinstance(interface.params['MediaType'], int):
+                            if (agent.get_id() == controller_id) and (interface.params['MediaType']<=1):
+                                controller_backhaul_interface = interface
+                                controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                                controller_agent = agent
+                        else:
+                            if (agent.get_id() == controller_id) and (
+                                interface.params['MediaType'] == "IEEE_802_3AB_GIGABIT_ETHERNET"
+                                or interface.params['MediaType'] == "IEEE_802_3U_FAST_ETHERNET"
+                            ):
+                                controller_backhaul_interface = interface
+                                controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                                controller_agent = agent
 
         # Controller has no neighbours yet, mark first ethernet interface as backhaul
         if not controller_backhaul_interface:
@@ -79,10 +88,17 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                 if agent.get_id() == controller_id:
                     controller_agent = agent
                     for iface in agent.get_interfaces():
-                        if iface.params['MediaType']<=1:
-                            controller_backhaul_interface = iface
-                            controller_backhaul_interface.orientation = ORIENTATION.DOWN
-                            break
+                        if isinstance(iface.params['MediaType'], int):
+                            if iface.params['MediaType']<=1:
+                                controller_backhaul_interface = iface
+                                controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                                break
+                        else:
+                            if (iface.params['MediaType'] == "IEEE_802_3AB_GIGABIT_ETHERNET"
+                               or iface.params['MediaType'] == "IEEE_802_3U_FAST_ETHERNET"):
+                                controller_backhaul_interface = iface
+                                controller_backhaul_interface.orientation = ORIENTATION.DOWN
+                                break
 
 
         # 4. Link interfaces to parents
