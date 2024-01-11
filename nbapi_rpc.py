@@ -117,9 +117,11 @@ def send_client_steering_request(conn_ctx: ControllerConnectionCtx, sta_mac: str
     if not conn_ctx:
         raise ValueError("Passed a None connection context.")
     # ubus call Device.WiFi.DataElements.Network ClientSteering '{"station_mac":"<client_mac>", "target_bssid":"<BSSID>"}'
-    json_payload = {"sendresp": True,
+    json_payload = {"username": "admin",
+                    "password": "admin",
+                    "sendresp": True,
                     "commandKey": "",
-                    "command": "Device.WiFi.DataElements.Network.ClientSteering",
+                    "command": "X_PRPL-ORG_WiFiController.Network.ClientSteering",
                     "inputArgs": {"station_mac": sta_mac,
                                   "target_bssid": new_bssid}}
     send_nbapi_command(conn_ctx, json_payload)
