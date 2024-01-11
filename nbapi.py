@@ -9,6 +9,8 @@ import threading
 import re
 import logging
 import requests
+import sys
+from pprint import pprint
 
 from controller_ctx import ControllerConnectionCtx
 from topology import Topology
@@ -241,9 +243,20 @@ class NBAPITask(threading.Thread):
         while not self.quitting:
             url = f"http://{self.connection_ctx.ip_addr}:{self.connection_ctx.port}/serviceElements/Device.WiFi.DataElements."
             logging.debug(f"Ping -> {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
-            nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            
+            if self.connection_ctx.authType == "basic":
+                nbapi_root_request_response = requests.get(url=url, auth=self.auth, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            else:
+                nbapi_root_request_response = requests.get(url=url, headers=self.connection_ctx.authHeader, timeout=(self.connection_timeout_seconds, self.read_timeout_seconds))
+            
             if not nbapi_root_request_response.ok:
-                logging.error(f"{self.connection_ctx.ip_addr}:{self.connection_ctx.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
+                # Check if the request failed because of an unexisting/old session token:
+                if nbapi_root_request_response.status_code==401 and "WWW-Authenticate" in nbapi_root_request_response.headers:
+                    if nbapi_root_request_response.headers["WWW-Authenticate"] == "bearer":
+                        logging.debug(f"Request failed because of invalid session token")
+                        self.connection_ctx.renewSession()
+                else:
+                    logging.error(f"{self.connection_ctx.ip_addr}:{self.connection_ctx.port} HTTP response code {nbapi_root_request_response.status_code} '{nbapi_root_request_response.reason}'")
             else:
                 logging.debug(f"Pong <- {self.connection_ctx.ip_addr}:{self.connection_ctx.port} #{self.heartbeat_count}")
                 self.heartbeat_count = self.heartbeat_count + 1

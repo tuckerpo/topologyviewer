@@ -24,7 +24,7 @@ def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json)
     """
     url = f"http://{conn_ctx.ip_addr}:{conn_ctx.port}/commands"
     logging.debug(f"Sending NBAPI command to {url}, payload={command_payload}")
-    response = requests.post(url=url, auth=(conn_ctx.auth.user, conn_ctx.auth.password), timeout=3, json=command_payload)
+    response = requests.post(url=url, timeout=3, json=command_payload)
     if not response.ok:
         logging.error(f"Failed to send NBAPI command to f{url}: command payload: {command_payload}, HTTP code: {response.status_code}")
 
