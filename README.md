@@ -18,6 +18,17 @@ You'll additionally need some external packages:
 `sudo apt install graphviz`
 
 ## **To Run the topologyviewer:**
+Change the included `config.ini` file to match your setup.
+
+### **Use included script:**
+
+`source prepare_env.sh`
+
+`python main.py`
+
+-> open your browser at: http://localhost:8050/
+
+### **Manually prepare python env:**
 
 `python -m venv ./`
 
