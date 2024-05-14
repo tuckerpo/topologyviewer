@@ -38,6 +38,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
     agent_dict: Dict[str, Agent] = {}
     iface_dict: Dict[str, Interface] = {}
+    agent_ifaces = []
 
     for entry in nbapi_json:
         path = entry['path']
@@ -59,6 +60,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                     iface.set_parent_agent(agent)
                     agent.add_interface(iface)
                     iface_dict[path] = iface
+                    agent_ifaces.append(params['MACAddress'])
 
         # 3. Get Neighbors of each Interface
         controller_backhaul_interface = {}
@@ -150,9 +152,14 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                         bss = BSS(path, params)
                         radio.add_bss(bss)
                         for iface in iface_dict.values():
-                            if radio.params['ID'] == iface.params['MACAddress']:
+                            if bss.params['BSSID'] == iface.params['MACAddress']:
                                 bss.interface = iface
                                 break
+
+    # We need a full BSS topology, before parsing the stations
+    for entry in nbapi_json:
+        path = entry['path']
+        params = entry['parameters']
 
         # 7. Map Stations to the BSS they're connected to.
         station_list: List[Station] = []
@@ -167,6 +174,9 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
                         if path.startswith(bss.path):
                             sta = Station(path, params)
+                            if sta.get_mac() in agent_ifaces:
+                                # Do not show a station that is actually an agent
+                                continue
                             station_list.append(sta)
                             bss.add_connected_station(sta)
                             if station_has_undergone_move(sta.get_mac(), radio.get_ruid()):

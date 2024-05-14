@@ -1064,8 +1064,8 @@ def gen_app_layout(config: configparser.ConfigParser):
 
                                 Input the IP and Port of the Controller in the {brand_string} network to visualize.
                                 """)),
-                                dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value=ui_section.get('controller-addr', '192.168.1.110')),
-                                dcc.Input(id="port_input", type="text", placeholder="8080", value=ui_section.get('controller-port', '8080')),
+                                dcc.Input(id="ip_input", type="text", placeholder="192.168.1.1", value=ui_section.get('controller-addr', '192.168.1.1')),
+                                dcc.Input(id="port_input", type="text", placeholder="8080", value=ui_section.get('controller-port', '80')),
                                 html.Br(),
                                 html.Br(),
                                 dcc.Markdown(d("""
