@@ -12,7 +12,7 @@ FROM python:3.11.4-bullseye as python-req
 
 RUN apt-get update \
     && apt-get -y install --no-install-recommends \
-    graphviz nano vim \
+    graphviz nano vim jq \
     && apt-get clean
 
 RUN useradd -ms /bin/bash pythonserver
@@ -31,7 +31,7 @@ RUN printf '\033[1;35m%s Cloning Topologyviewer\n\033[0m' "$(date --iso-8601=sec
     && git clone https://gitlab.com/prpl-foundation/prplmesh/topologyviewer.git topologyviewer \
     && printf '\033[1;35m%s Running server\n\033[0m' "$(date --iso-8601=seconds --universal)" \
     && cd topologyviewer \
-    && git checkout 2171a84cba639e4e495c1a612827b9ae84ac01c9
+    && git checkout 50d0a7114cebeba23a747360367d6d51ce751946
 
 WORKDIR /home/pythonserver/topologyviewer
 

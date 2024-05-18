@@ -1187,6 +1187,6 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d_%H:%M:%S')
     app.layout = gen_app_layout(config_parser)
     app.title = get_app_title(config_parser)
-    app.run_server(debug=config_parser.getboolean('server', 'debug'))
+    app.run_server(debug=config_parser.getboolean('server', 'debug'), host=config_parser.get('server', 'host'), port=config_parser.get('server', 'port'))
     if nbapi_thread:
         nbapi_thread.quit()
