@@ -19,6 +19,12 @@ You'll additionally need some external packages:
 
 ## **To Run the topologyviewer:**
 
+### With Docker
+
+`docker compose up --build`
+
+### Native
+
 `python -m venv ./`
 
 `source ./bin/activate`
