@@ -707,6 +707,7 @@ def update_transition_dropdown_menus(_, _type):
     """
     placeholder = 'Select a new BSSID'
     avail_stations = [sta.get_mac() for sta in get_topology().get_stations()]
+    avail_targets  = []
     if _type is None or _type == 'Client Steering':
         avail_targets = [bss.get_bssid() for bss in get_topology().get_bsses()]
     elif _type == 'VBSS':

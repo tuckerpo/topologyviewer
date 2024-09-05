@@ -36,6 +36,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
 
     agent_dict: Dict[str, Agent] = {}
     iface_dict: Dict[str, Interface] = {}
+    controller_id: str = ''
 
     for entry in nbapi_json:
         path = entry['path']
