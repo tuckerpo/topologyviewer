@@ -53,7 +53,7 @@ def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, d
     }
     send_nbapi_command(conn_ctx, json_payload)
 
-def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, client_mac: str, ssid: str, password: str, radio: Radio):
+def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, ssid: str, password: str, radio: Radio):
     """Sends a VBSS creation request to an NBAPI Radio endpoint.
 
     Args:
@@ -70,12 +70,17 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
     """
     if not conn_ctx:
         raise ValueError()
+    # There is no need to include a client MAC addr in a VBSS creation
+    # request, but it's required by the prpl NBAPI, so we just pass an empty
+    # string.
+    # See: prplmesh:controller/on_action.cpp
+    null_client_mac = ""
     device_idx = parse_index_from_path_by_key(radio.path, 'Device')
     radio_idx  = parse_index_from_path_by_key(radio.path, 'Radio')
     json_payload = {"sendresp": True,
                     "commandKey": "",
                     "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
-                    "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
+                    "inputArgs": {"vbssid": vbssid, "client_mac": null_client_mac, "ssid": ssid, "pass": password}}
     send_nbapi_command(conn_ctx, json_payload)
 
 def send_vbss_destruction_request(conn_ctx: ControllerConnectionCtx, client_mac: str, should_disassociate: bool, bss: BSS):
