@@ -690,14 +690,6 @@ def update_prplmesh_ssid(_):
     """
     return get_topology().get_ssid()
 
-@app.callback(Output('vbss-creation-client-mac', 'options'),
-              Input('vbss-creation-interval', 'n_intervals')
-)
-def update_stations(_):
-    """Populates the available station list for the client MAC field of a VBSS creation request.
-    """
-    return [sta.get_mac() for sta in get_topology().get_stations()]
-
 @app.callback(Output('transition_station', 'options'),
               Output('transition_bssid', 'options'),
               Output('transition_bssid', 'placeholder'),
@@ -715,6 +707,7 @@ def update_transition_dropdown_menus(_, _type):
     """
     placeholder = 'Select a new BSSID'
     avail_stations = [sta.get_mac() for sta in get_topology().get_stations()]
+    avail_targets  = []
     if _type is None or _type == 'Client Steering':
         avail_targets = [bss.get_bssid() for bss in get_topology().get_bsses()]
     elif _type == 'VBSS':
@@ -867,18 +860,16 @@ def vbss_move_callback(n_clicks: int, ssid: str, password: str, dest_ruid: str, 
               Input('vbss-creation-submit', 'n_clicks'),
               State('vbss-ssid', 'value'),
               State('vbss-pw', 'value'),
-              State('vbss-creation-client-mac', 'value'),
               State('vbss-creation-vbssid', 'value'),
               State('vbss-creation-ruid', 'value')
 )
-def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str, vbssid: str, ruid: str):
+def vbss_creation_click(n_clicks: int, ssid: str, password: str, vbssid: str, ruid: str):
     """Callback for VBSS Creation Button click
 
     Args:
         n_clicks (int): How many clicks? Binary, 1 or 0. If 0, just bail.
         ssid (str): SSID of the VBSS to create.
         password (str): Password for the VBSS.
-        client_mac (str): The Client (STA) that this VBSS is meant for.
         vbssid (str): The VBSSID to use for the newly created VBSS.
 
     Returns:
@@ -892,23 +883,18 @@ def vbss_creation_click(n_clicks: int, ssid: str, password: str, client_mac: str
         return "Enter a password"
     if vbssid is None:
         return "Enter a VBSSID"
-    if client_mac is None:
-        return "Select a station"
     if ruid is None:
         return "Select a Radio to create the VBSS on."
     is_password_valid, password_error = validation.validate_vbss_password_for_creation(password)
     if not is_password_valid:
         return f"Invalid password: {password_error}"
-    is_client_mac_valid, client_mac_error = validation.validate_vbss_client_mac(client_mac, get_topology())
-    if not is_client_mac_valid:
-        return f"Client MAC invalid: {client_mac_error}"
     is_vbssid_valid, vbssid_error = validation.validate_vbss_vbssid(vbssid, get_topology())
     if not is_vbssid_valid:
         return f"VBSSID invalid: {vbssid_error}"
     radio = get_topology().get_radio_by_ruid(ruid)
     if radio is None:
         return "Radio is unknown"
-    send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, client_mac, ssid, password, radio)
+    send_vbss_creation_request(g_ControllerConnectionCtx, vbssid, ssid, password, radio)
     return "Sent a VBSS creation request."
 
 
@@ -1090,7 +1076,6 @@ def gen_app_layout(config: configparser.ConfigParser):
                                 dcc.Input(id="vbss-ssid", type="text", placeholder="VBSS SSID"),
                                 dcc.Input(id="vbss-pw", type="password", placeholder="VBSS Password"),
                                 dcc.Input(id='vbss-creation-vbssid', type='text', placeholder='VBSSID'),
-                                dcc.Dropdown(options=[], id='vbss-creation-client-mac', placeholder='Select a station.'),
                                 dcc.Dropdown(options=[], id='vbss-creation-ruid', placeholder='Select a RUID.'),
                                 dcc.Interval(id='vbss-creation-interval', interval=300, n_intervals=0),
                                 html.Div(id="vbss-creation-output", children='Press Transition to begin station transition.'),
