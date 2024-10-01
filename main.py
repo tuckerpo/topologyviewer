@@ -410,6 +410,8 @@ def network_graph(topology: Topology):
                 node_labels.append("  prplMesh Agent on prplOS<br>  (Freedom)")
             elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "freedom_rdkb":
                 node_labels.append("  prplMesh Agent on RDK-B<br>  (Freedom)")
+            elif topology.get_agent_from_hash(node).params["ManufacturerModel"] == "prpl Foundation Freedom":
+                node_labels.append("  prplMesh Agent on prplOS<br>  (Freedom)")
             else:
                 node_labels.append(" unknown EasyMesh Agent")
 

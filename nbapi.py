@@ -70,7 +70,6 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                 for interface in agent.get_interfaces():
                     if path.startswith(interface.path):
                         interface.add_neighbor(Neighbor(path, params))
-
                         # Mark the backhaul interface of the controller: should be Ethernet type and have at least 1 neighbor
                         if isinstance(interface.params['MediaType'], int):
                             if (agent.get_id() == controller_id) and (interface.params['MediaType']<=1):
@@ -85,6 +84,7 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                                 controller_backhaul_interface = interface
                                 controller_backhaul_interface.orientation = ORIENTATION.DOWN
                                 controller_agent = agent
+
 
         # Controller has no neighbours yet, mark first ethernet interface as backhaul
         if not controller_backhaul_interface:
@@ -110,22 +110,28 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
             if params['LinkType'] == "None":
                 continue
 
-            # Ethernet backhaul connections must always link to the controller
+            # hot fix for paris 2024, ethernet backhaul
+            # for every device who reports backhaul
+            # add that as a child of the controller
+            # add that ethernet interface as the child of the controller's first interface
             if params['LinkType'] == "Ethernet":
-                # Search for backhaul interface on the device that is getting processed
-                for iface in iface_dict.values():
-                    # TODO PPM-2043: HACK: prplMesh doesn't report Parent/Child Relation of Agent with Wired Connection
-                    # Instead, assume wired backhaul from agent(s) to controller on firt ethernet interface of agent.
-                    if iface.get_interface_number() == "1":
-                        if not controller_backhaul_interface:
-                            continue
-                        if iface.get_mac() == controller_backhaul_interface.get_mac():
-                            continue
-                        if not controller_backhaul_interface.has_child_iface(iface.get_mac()):
-                            controller_backhaul_interface.add_child(iface)
-                            iface.orientation = ORIENTATION.UP
-                            controller_agent.add_child(iface.get_parent_agent())
+                for agent in agent_dict.values():
+                    if agent.get_id() == controller_id:
+                        controller_agent = agent
+                        for iface in agent.get_interfaces():
+                            controller_backhaul_interface = iface
+                            break
+                        break
+                for agent in agent_dict.values():
+                    if path.startswith(agent.path):
+                        controller_agent.add_child(agent)
 
+                target_mac = params['MACAddress']
+                for iface in iface_dict.values():
+                    if iface.get_mac() == target_mac:
+                        controller_backhaul_interface.add_child(iface)
+                        iface.orientation = ORIENTATION.UP
+                        break
 
             elif params['LinkType'] == "Wi-Fi":
                 for child_iface in iface_dict.values():
