@@ -31,7 +31,7 @@ RUN printf '\033[1;35m%s Cloning Topologyviewer\n\033[0m' "$(date --iso-8601=sec
     && git clone https://gitlab.com/prpl-foundation/prplmesh/topologyviewer.git topologyviewer \
     && printf '\033[1;35m%s Running server\n\033[0m' "$(date --iso-8601=seconds --universal)" \
     && cd topologyviewer \
-    && git checkout 4e3ca5759b382fa73dd12fd193aafed3689637e9
+    && git checkout c35863d10a2a4fc8276d212c561dd52fb6d3c867
 
 WORKDIR /home/pythonserver/topologyviewer
 
