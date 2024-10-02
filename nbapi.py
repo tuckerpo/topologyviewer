@@ -125,12 +125,11 @@ def marshall_nbapi_blob(nbapi_json) -> Topology:
                 for agent in agent_dict.values():
                     if path.startswith(agent.path):
                         controller_agent.add_child(agent)
-
-                target_mac = params['MACAddress']
-                for iface in iface_dict.values():
-                    if iface.get_mac() == target_mac:
-                        controller_backhaul_interface.add_child(iface)
-                        iface.orientation = ORIENTATION.UP
+                        for iface in agent.get_interfaces():
+                            if iface.is_wired():
+                                controller_backhaul_interface.add_child(iface)
+                                iface.orientation = ORIENTATION.UP
+                                break
                         break
 
             elif params['LinkType'] == "Wi-Fi":

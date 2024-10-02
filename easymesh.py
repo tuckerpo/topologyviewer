@@ -544,6 +544,9 @@ class Interface():
                 return True
         return False
 
+    def is_wired(self) -> bool:
+        return self.params['wired'] == 1
+
 
 class Agent():
     """Class representing a Wi-Fi EasyMesh Agent.
