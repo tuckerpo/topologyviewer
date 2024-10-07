@@ -293,9 +293,13 @@ class Topology():
         Returns:
             str: The SSID if found, error message otherwise.
         """
+        ssid = "No SSID found on 2.4 GHz"
+        # TODO(tucker): shouldn't radio carry Interface references so we can sort by band?
+        # Seems useful, as opposed to assume that 0th radio's 0th BSS is the static 2.4 GHz network ...
         if self.controller:
-            return self.controller.get_radios()[0].get_bsses()[0].params["SSID"]
-        return "No SSID found"
+            if len(self.controller.get_radios()) and len(self.controller.get_radios()[0].get_bsses()):
+                ssid = self.controller.get_radios()[0].get_bsses()[0].params['SSID']
+        return ssid
 
     def get_radio_by_ruid(self, ruid: str) -> Radio:
         """Look up a Radio object by Radio UID
