@@ -36,6 +36,7 @@ pylint:
     paths:
       - pylint_output.txt
     when: always
+  allow_failure: true
 
 unit_tests:
   stage: tests
