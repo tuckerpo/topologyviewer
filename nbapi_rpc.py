@@ -23,14 +23,18 @@ def send_nbapi_command(conn_ctx: ControllerConnectionCtx, command_payload: json)
         None
     """
     url = f"http://{conn_ctx.ip_addr}:{conn_ctx.port}/commands"
+    needs_auth_token = conn_ctx.authType != 'basic'
     logging.debug(f"Sending NBAPI command to {url}, payload={command_payload}")
-    response = requests.post(url=url, timeout=3, json=command_payload)
+    if needs_auth_token:
+        response = requests.post(url=url, timeout=3, json=command_payload, headers=conn_ctx.authHeader)
+    else:
+        response = requests.post(url=url, timeout=3, json=command_payload, auth=conn_ctx.auth)
     if not response.ok:
-        logging.error(f"Failed to send NBAPI command to f{url}: command payload: {command_payload}, HTTP code: {response.status_code}")
+        logging.error(f"Failed to send NBAPI command to {url}: command payload: {command_payload}, HTTP code: {response.status_code}")
 
 def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, dest_ruid: str, ssid: str, password: str, bss: BSS):
     """Sends a VBSS move request over the network.
-    ubus call Device.WiFi.DataElements.Network.Device.1.Radio.2.BSS.2 TriggerVBSSMove "{'client_mac':'c2:f5:2b:3d:d9:7e', 'dest_ruid':'96:83:c4:16:83:b2','ssid':'iNetVBSS2', 'pass':'password'}"
+    ubus call X_PRPL-ORG_WiFiController.Network.Device.1.Radio.2.BSS.2 TriggerVBSSMove "{'client_mac':'c2:f5:2b:3d:d9:7e', 'dest_ruid':'96:83:c4:16:83:b2','ssid':'iNetVBSS2', 'pass':'password'}"
     Args:
         conn_ctx (ControllerConnectionCtx): The connection to the topology's controller.
         client_mac (str): The client we're moving the VBSS for.
@@ -48,7 +52,7 @@ def send_vbss_move_request(conn_ctx: ControllerConnectionCtx, client_mac: str, d
     json_payload = {
         "sendresp": True,
         "commandKey": "",
-        "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSMove",
+        "command": f"X_PRPL-ORG_WiFiController.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSMove()",
         "inputArgs": {"client_mac": client_mac, "dest_ruid": dest_ruid, "ssid": ssid, "pass": password}
     }
     send_nbapi_command(conn_ctx, json_payload)
@@ -62,8 +66,8 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
         client_mac (str): The MAC address of the client that this VBSS is for.
         ssid (str): The SSID of the VBSS.
         password (str): The password for the VBSS.
-        device_idx (int): The NBAPI Device index.("Device.WiFi.DataElements.Network.Device.n")
-        radio_idx (int): The NBAPI Radio index. ("Device.WiFi.DataElements.Network.Device.1.Radio.n")
+        device_idx (int): The NBAPI Device index.("X_PRPL-ORG_WiFiController.Network.Device.n")
+        radio_idx (int): The NBAPI Radio index. ("X_PRPL-ORG_WiFiController.Network.Device.1.Radio.n")
 
     Raises:
         ValueError: Throws if not provided a valid ControllerConnectionCtx
@@ -74,7 +78,7 @@ def send_vbss_creation_request(conn_ctx: ControllerConnectionCtx, vbssid: str, c
     radio_idx  = parse_index_from_path_by_key(radio.path, 'Radio')
     json_payload = {"sendresp": True,
                     "commandKey": "",
-                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation",
+                    "command": f"X_PRPL-ORG_WiFiController.Network.Device.{device_idx}.Radio.{radio_idx}.TriggerVBSSCreation()",
                     "inputArgs": {"vbssid": vbssid, "client_mac": client_mac, "ssid": ssid, "pass": password}}
     send_nbapi_command(conn_ctx, json_payload)
 
@@ -94,7 +98,7 @@ def send_vbss_destruction_request(conn_ctx: ControllerConnectionCtx, client_mac:
     bss_idx = parse_index_from_path_by_key(bss.path, 'BSS')
     json_payload = {"sendresp": True,
                     "commandKey": "",
-                    "command": f"Device.WiFi.DataElements.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSDestruction",
+                    "command": f"X_PRPL-ORG_WiFiController.Network.Device.{device_idx}.Radio.{radio_idx}.BSS.{bss_idx}.TriggerVBSSDestruction()",
                     "inputArgs": {"client_mac": client_mac, "should_disassociate": should_disassociate}}
     send_nbapi_command(conn_ctx, json_payload)
 
